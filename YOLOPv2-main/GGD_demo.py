@@ -87,7 +87,7 @@ def calculate_line_score(x1, y1, x2, y2):
     else:
         return -score_magnitude
 
-def draw_average_lines(lines):
+def average_lines(lines):
     if not lines:
         return
     lines_array = np.array(lines)
@@ -164,29 +164,17 @@ def detect():
         t4 = time_synchronized()
 
         da_seg_mask = driving_area_mask(seg)
-        ll_seg_mask = lane_line_mask(ll)
-
-        # ==========================================
-        # [수정됨] ROI 적용 후 Hough 변환
-        # ==========================================
-        
-        # 1. 마스크 준비 (uint8, 0-255)
-        mask_vis = (ll_seg_mask * 255).astype(np.uint8)
-
-        # 2. 마스크를 원본 크기로 리사이즈
+        ll_seg_mask = lane_line_mask(ll) # line mask
+        mask_vis = (ll_seg_mask * 255).astype(np.uint8) # mask -> vis image
         h, w = im0s.shape[:2]
         mask_resized = cv2.resize(mask_vis, (w, h), interpolation=cv2.INTER_NEAREST)
 
-        # ---------------------------------------------------------
-        # ★ [추가됨] Erode (침식 연산) : 선 얇게 만들기 ★
-        # ---------------------------------------------------------
-        # 커널 크기가 클수록, 반복 횟수(iterations)가 많을수록 더 많이 깎입니다.
+        # erode (seg 된 결과는 너무 두꺼움) -----------------------------------
         erode_kernel = np.ones((3, 3), np.uint8) 
         mask_eroded = cv2.erode(mask_resized, erode_kernel, iterations=5)
+        # ------------------------------------------------------------------
 
-        # ---------------------------------------------------------
-        # ★ ROI (사다리꼴) 설정 및 적용 ★
-        # ---------------------------------------------------------
+        # Make ROI & apply -------------------------------------------------
         roi_bottom_width = 1.0   # 바닥 너비
         roi_top_width = 0.9      # 윗변 너비
         roi_height = 0.45        # 높이
@@ -206,13 +194,9 @@ def detect():
 
         roi_mask_img = np.zeros_like(mask_eroded)
         cv2.fillPoly(roi_mask_img, roi_verts, 255)
-
-        # 침식된 이미지(mask_eroded)에 ROI 적용
         mask_roi_applied = cv2.bitwise_and(mask_eroded, roi_mask_img)
 
-        # ---------------------------------------------------------
-        # ★ 허프 변환 (Erode + ROI 적용된 이미지 사용) ★
-        # ---------------------------------------------------------
+        # Apply Hough Transform ------------------------------------------------------------------ 
         lines = cv2.HoughLinesP(
             mask_roi_applied,          
             rho=5, #거리 해상도. 직선을 탐지할 때 얼마나 촘촘한 간격 
@@ -224,12 +208,14 @@ def detect():
 
         mask_bgr = cv2.cvtColor(mask_roi_applied, cv2.COLOR_GRAY2BGR)
         cv2.polylines(mask_bgr, roi_verts, isClosed=True, color=(0, 255, 0), thickness=2)
-
-        # filtering Algorithm
-        filtering_slope = 0.3
+        #------------------------------------------------------------------------------------------
+        
+        # filtering Algorithm ------------------------------------------------
+        filtering_slope = 0.3 # 이 기울기 이하의 직선은 가로선으로 가정하고 버림
 
         right_lines = []
         left_lines = []
+
         if lines is not None:
             for line in lines:
                 x1, y1, x2, y2 = line[0]
@@ -237,42 +223,44 @@ def detect():
                 # 기울기 필터링
                 dx = x2 - x1
                 dy = y2 - y1
-                
+            
                 if dx == 0: 
-                    continue # 완전 수직선은 일단 제외 (필요시 포함 가능)
+                    continue # 수평선 제외
 
                 slope = dy / dx
                 
-                if abs(slope) <= filtering_slope:
+                if abs(slope) <= filtering_slope: # 임곗값 이하 기울기 제외
                     continue
 
-
+                # Scoreing Method --------------------------
+                # Scoring range : -100 ~ 100 
                 ls = calculate_line_score(x1, y1, x2, y2)
                 lm = calculate_midpoint_score(x1, y1, w)
-
 
                 if ls + lm <= 0:
                     left_lines.append([x1, y1, x2, y2])
                 else:
                     right_lines.append([x1, y1, x2, y2])
+                # ------------------------------------------
         
-        left_result = draw_average_lines(left_lines)
-        right_result = draw_average_lines(right_lines)
+        left_result = average_lines(left_lines)
+        right_result = average_lines(right_lines)
 
-        m_left = 0
-        m_right = w
+        left_mid_point = 0 # initialize
+        right_mid_point = w
+
+        # Final lane, Point Visualization and Compute  -----------------------------
         if left_result is not None:
             lx1, ly1, lx2, ly2 = left_result
-            m_left = int((lx1 + lx2) / 2)
-            cv2.circle(mask_bgr, (m_left, y_mid), 20, (0, 0, 255), -1)
+            left_mid_point = int((lx1 + lx2) / 2)
+            cv2.circle(mask_bgr, (left_mid_point, y_mid), 20, (0, 0, 255), -1)
         
         if right_result is not None:
             lx1, ly1, lx2, ly2 = right_result
-            m_right = int((lx1 + lx2) / 2)
-            cv2.circle(mask_bgr, (m_right, y_mid), 20, (255, 0, 0), -1)
+            right_mid_point = int((lx1 + lx2) / 2)
+            cv2.circle(mask_bgr, (right_mid_point, y_mid), 20, (255, 0, 0), -1)
         
-        # Lane & Point visualization
-        final_midpoint = int((m_left + m_right) / 2)
+        final_midpoint = int((left_mid_point + right_mid_point) / 2)
         cv2.circle(mask_bgr, (final_midpoint, y_mid), 20, (255, 255, 0), -1)
         
         for line in right_lines:
@@ -284,21 +272,18 @@ def detect():
             x1, y1, x2 ,y2 = line
             color = (0, 0, 255)
             cv2.line(mask_bgr, (x1, y1), (x2, y2), color, 1)
+        # --------------------------------------------------------------------------
 
 
-
-
-        # 4. 가로로 붙이기
+        # For Cv2 imshow
         combined = np.hstack((im0s, mask_bgr))
-
-        # 5. 화면 크기 줄이기 (너비 1200px)
         target_width = 1200
         scale = target_width / combined.shape[1]
         new_w = int(combined.shape[1] * scale)
         new_h = int(combined.shape[0] * scale)
-        
         combined_small = cv2.resize(combined, (new_w, new_h))
-
+        cv2.imshow('Left: Original | Right: Erode+ROI+Hough', combined_small)
+        
         # Save Data --------------------------------------------------------------------------------------------
         if save_mp4_toggle is True:
             if output_writer is None: # 처음 한 번만 실행됨
@@ -307,10 +292,8 @@ def detect():
                 output_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (new_w, new_h))
             output_writer.write(combined_small) # 프레임 저장
         if save_csv_toggle is True:
-            writer.writerow([m_left, m_right, final_midpoint])
+            writer.writerow([left_mid_point, right_mid_point, final_midpoint])
         # -------------------------------------------------------------------------------------------------------
-        
-        cv2.imshow('Left: Original | Right: Erode+ROI+Hough', combined_small)
         if cv2.waitKey(1) == ord('q'):
             break
 
