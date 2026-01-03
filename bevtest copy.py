@@ -4,28 +4,10 @@ import os
 import math
 from sklearn.cluster import DBSCAN
 
-# [수정됨] 가중 평균 계산 함수
-# data_list: [(angle1, weight1), (angle2, weight2), ...] 형식
-def calculate_weighted_average_angle(data_list):
-    if not data_list: return None
-    
-    total_weighted_angle = 0.0
-    total_weight = 0.0
-    
-    for angle, weight in data_list:
-        # 가중치(y좌표)를 제곱하면 하단 직선의 영향력을 더 극대화할 수 있음.
-        # 여기서는 단순히 y좌표(weight)를 그대로 사용하여 선형적인 가중치를 줌.
-        w = weight 
-        total_weighted_angle += angle * w
-        total_weight += w
-        
-    if total_weight == 0: return 0.0
-    
-    return total_weighted_angle / total_weight
-
-# 두 점 사이의 거리 계산 헬퍼 함수
-def calc_dist(p1, p2):
-    return math.hypot(p1[0] - p2[0], p1[1] - p2[1])
+# 각도 평균 계산 함수 (단순 산술 평균)
+def calculate_average_angle(angles_deg):
+    if not angles_deg: return None
+    return sum(angles_deg) / len(angles_deg)
 
 def run_lane_detection_arrow_on_bev(video_source, height_usage_ratio=0.6, bottom_shrink_ratio=0.73):
     cap = cv2.VideoCapture(video_source)
@@ -45,12 +27,12 @@ def run_lane_detection_arrow_on_bev(video_source, height_usage_ratio=0.6, bottom
     
     cluster_colors = [(0, 0, 255), (0, 255, 0), (255, 0, 0), (0, 255, 255), (255, 0, 255)]
 
+    # 화살표 설정 (BEV 이미지 기준 하단 중앙)
     arrow_start_pt = (w // 2, roi_h - 50) 
     arrow_len = 100
     
+    # 초기값: 0도 (정면)
     current_avg_angle = 0.0
-    dist_weight = 0.05 
-    dbscan_eps = 25 
 
     print("--- [Space] 다음 프레임 / [q] 종료 ---")
 
@@ -58,6 +40,7 @@ def run_lane_detection_arrow_on_bev(video_source, height_usage_ratio=0.6, bottom
         ret, frame = cap.read()
         if not ret: break
 
+        # 1. BEV & 전처리
         roi_img = frame[start_y:h, 0:w]
         bev_img = cv2.warpPerspective(roi_img, M, (w, roi_h), flags=cv2.INTER_LINEAR)
 
@@ -74,53 +57,47 @@ def run_lane_detection_arrow_on_bev(video_source, height_usage_ratio=0.6, bottom
         edges_color = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
         bev_viz = bev_img.copy()
 
-        # [수정됨] 각도뿐만 아니라 무게중심(y)도 저장할 리스트
-        largest_cluster_data = [] 
+        largest_cluster_angles = []
 
+        # 2. 각도 계산 및 DBSCAN
         if lines is not None:
             data_angles = []
             valid_indices = []
-            valid_line_coords = [] 
 
             for i, line in enumerate(lines):
                 x1, y1, x2, y2 = line[0]
 
+                # (x1, y1)을 항상 화면 상단(멀리 있는 점, y값이 작은 점)으로 배치
+                # (x2, y2)는 화면 하단(가까운 점, y값이 큰 점)
                 if y1 > y2:
                     x1, y1, x2, y2 = x2, y2, x1, y1
 
+                # 기준: 정면(위쪽)이 0도, 오른쪽이 +, 왼쪽이 -
+                # dx: 상단 x - 하단 x (오른쪽으로 기울면 양수, 왼쪽이면 음수)
+                # dy: 하단 y - 상단 y (항상 양수, 선분의 높이)
                 dx = x1 - x2
-                dy = y2 - y1 
+                dy = y2 - y1 # y축은 아래로 증가하므로 하단값 - 상단값
 
                 if dy == 0: 
+                    # 완전 수평선인 경우 (거의 없겠지만 예외처리)
                     angle = 90.0 if dx > 0 else -90.0
                 else:
+                    # atan2(dx, dy) -> dy(수직)가 기준축이 됨
                     angle = math.degrees(math.atan2(dx, dy))
 
+                # 너무 수평에 가까운 선(노이즈) 제거 (예: +- 80도 이상은 무시)
                 if abs(angle) > 80: continue
                 
                 data_angles.append(angle)
                 valid_indices.append(i)
-                valid_line_coords.append(((x1, y1), (x2, y2)))
 
-            num_samples = len(data_angles)
-            if num_samples > 0:
+            if len(data_angles) > 0:
                 angles_np = np.array(data_angles)
-                angle_diff_matrix = np.abs(angles_np[:, None] - angles_np[None, :])
+                # 각도 차이 계산 (이제 -90 ~ 90 범위이므로 단순 차이 사용)
+                diff_matrix = np.abs(angles_np[:, None] - angles_np[None, :])
                 
-                dist_matrix_spatial = np.zeros((num_samples, num_samples))
-                for i in range(num_samples):
-                    for j in range(i + 1, num_samples):
-                        p1_a, p2_a = valid_line_coords[i]
-                        p1_b, p2_b = valid_line_coords[j]
-                        d1 = calc_dist(p1_a, p1_b) + calc_dist(p2_a, p2_b)
-                        d2 = calc_dist(p1_a, p2_b) + calc_dist(p2_a, p1_b)
-                        final_dist = min(d1, d2)
-                        dist_matrix_spatial[i][j] = final_dist
-                        dist_matrix_spatial[j][i] = final_dist
-
-                combined_matrix = angle_diff_matrix + (dist_matrix_spatial * dist_weight)
-                
-                db = DBSCAN(eps=dbscan_eps, min_samples=3, metric='precomputed').fit(combined_matrix)
+                # eps=20 (이전 요청사항 유지)
+                db = DBSCAN(eps=20, min_samples=5, metric='precomputed').fit(diff_matrix)
                 labels = db.labels_
 
                 unique_labels = set(labels)
@@ -140,33 +117,42 @@ def run_lane_detection_arrow_on_bev(video_source, height_usage_ratio=0.6, bottom
                     else:
                         rank = rank_map[label]
                         color = cluster_colors[rank % len(cluster_colors)]
-                        
-                        thickness = 3 if rank == 0 else 1
                         cv2.line(edges_color, (x1, y1), (x2, y2), color, 2)
-                        cv2.line(bev_viz, (x1, y1), (x2, y2), color, thickness)
+                        cv2.line(bev_viz, (x1, y1), (x2, y2), color, 3)
                         
-                        # [수정됨] 랭크 0인 경우 각도와 가중치(y좌표) 저장
-                        if rank == 0:
-                            # 직선의 중심 y좌표를 가중치로 사용
-                            # y가 클수록(화면 아래쪽일수록) 가중치 높음
-                            mid_y = (y1 + y2) / 2.0
-                            largest_cluster_data.append((angle, mid_y))
+                        # 가장 큰 클러스터의 각도만 수집
+                        if rank == 0: 
+                            largest_cluster_angles.append(angle)
 
-        # [수정됨] 가중 평균 함수 호출
-        weighted_avg_angle = calculate_weighted_average_angle(largest_cluster_data)
-        if weighted_avg_angle is not None:
-            current_avg_angle = weighted_avg_angle
+        # ==================================================
+        # [수정됨] 화살표 그리기 (새로운 좌표계 적용)
+        # ==================================================
+        avg_angle = calculate_average_angle(largest_cluster_angles)
+        if avg_angle is not None:
+            current_avg_angle = avg_angle
 
-        # --- 화살표 시각화 (동일) ---
+        # 디버깅용 출력
+        # print(f"Current Steering Angle: {current_avg_angle:.2f} deg (Neg: Left, Pos: Right)")
+
+        # 각도를 라디안으로 변환
         angle_rad = math.radians(current_avg_angle)
+
+        # 끝점 계산
+        # 0도일 때: sin(0)=0 (x변화 없음), cos(0)=1 (y 감소 = 위로)
+        # +각도(우회전)일 때: sin(+), cos(+) -> x 증가(우), y 감소(위) -> 우상단
+        # -각도(좌회전)일 때: sin(-), cos(+) -> x 감소(좌), y 감소(위) -> 좌상단
         arrow_end_x = int(arrow_start_pt[0] + arrow_len * math.sin(angle_rad))
         arrow_end_y = int(arrow_start_pt[1] - arrow_len * math.cos(angle_rad))
         
-        cv2.arrowedLine(edges_color, arrow_start_pt, (arrow_end_x, arrow_end_y), (0, 255, 255), 3, tipLength=0.3)
-        cv2.arrowedLine(bev_viz, arrow_start_pt, (arrow_end_x, arrow_end_y), (0, 255, 255), 3, tipLength=0.3)
+        arrow_end_pt = (arrow_end_x, arrow_end_y)
+
+        cv2.arrowedLine(edges_color, arrow_start_pt, arrow_end_pt, (0, 255, 255), 3, tipLength=0.3)
+        cv2.arrowedLine(bev_viz, arrow_start_pt, arrow_end_pt, (0, 255, 255), 3, tipLength=0.3)
         
-        cv2.putText(bev_viz, f"Avg Angle: {current_avg_angle:.1f}", (10, 30), 
+        # 텍스트로 각도 표시
+        cv2.putText(bev_viz, f"Angle: {current_avg_angle:.1f}", (10, 30), 
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
+        # ==================================================
 
         combined_result = cv2.hconcat([edges_color, bev_viz])
         cv2.imshow("res", combined_result)
@@ -179,10 +165,8 @@ def run_lane_detection_arrow_on_bev(video_source, height_usage_ratio=0.6, bottom
     cv2.destroyAllWindows()
 
 if __name__ == "__main__":
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    video_path = os.path.join(BASE_DIR, "runnig_data", "curv.mp4")
-    
-    if not os.path.exists(video_path):
-        print(f"[경고] 파일을 찾을 수 없습니다: {video_path}")
+    video_path = r"C:\Users\VIC_26\Desktop\Gyeonggi_AutoDriving_SW_Competition\advanced_exercise\curv.mp4"
+    if isinstance(video_path, str) and not os.path.exists(video_path):
+        print(f"[경고] 파일을 찾을 수 없습니다.")
     else:
-        run_lane_detection_arrow_on_bev(video_path, 0.4, 0.68)                 
+        run_lane_detection_arrow_on_bev(video_path, 0.4, 0.68)                     
