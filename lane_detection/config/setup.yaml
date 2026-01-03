@@ -1,0 +1,13 @@
+# Running mode
+cam_mode: False
+
+# Pub / Sub Topic name
+camera_topic: "/usb_cam/image_raw"
+output_topic: "lane_deg"
+# If cam mode : False, use video(/runnig_data).
+video_file_name: "curv.mp4" 
+
+# Params
+height_usage_ratio: 0.4      # 영상의 하단 ?퍼센트를 사용
+bottom_shrink_ratio: 0.68    # 사다리꼴 변환 비율 : 하면서 맞춰야 함
+dbscan_eps: 15               # 각도 클러스터링 거리
