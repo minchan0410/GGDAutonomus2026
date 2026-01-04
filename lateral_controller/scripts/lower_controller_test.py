@@ -18,8 +18,8 @@ class Test:
         while not rospy.is_shutdown():
             t = rospy.Time.now().to_sec() - self.start_time
 
-            # sin 파 생성: -30 ~ +30
-            steer_value = int(30 * math.sin(2 * math.pi * 0.2 * t))
+            # sin 파 생성: -15 ~ +15
+            steer_value = int(22 * math.sin(2 * math.pi * 0.2 * t))
             # ↑ 0.2 Hz = 5초에 한 번 왕복 (원하면 바꿔도 됨)
 
             msg = Int16()
