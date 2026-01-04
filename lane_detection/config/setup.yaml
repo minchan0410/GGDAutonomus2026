@@ -3,7 +3,7 @@ cam_mode: False
 
 # Pub / Sub Topic name
 camera_topic: "/usb_cam/image_raw"
-output_topic: "lane_deg"
+output_topic: "des_steer"
 # If cam mode : False, use video(/runnig_data).
 video_file_name: "curv.mp4" 
 
