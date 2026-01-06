@@ -1,0 +1,13 @@
+<launch>
+  <!-- 아래 테스트 코드 2개 모두 des_steer 토픽을 pub하기 떄문에 동시에 켜면 안됨. 
+  lower_controller_test.py 는 사인파 des_steer
+  lower_controller_test_step.py 는 스텝 des_steer를 -->
+  
+  
+  <node pkg="lateral_controller" type="lower_controller_test.py" name="lateral_lower_controller" output="screen"/>
+  
+  <!--
+  <node pkg="lateral_controller" type="lower_controller_test_step.py" name="lateral_lower_controller" output="screen"/>
+  -->
+
+</launch>

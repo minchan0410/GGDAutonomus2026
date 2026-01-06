@@ -204,3 +204,8 @@ include_directories(
 
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
+
+catkin_install_python(PROGRAMS
+  scripts/lateral_lower_controller.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)

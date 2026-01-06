@@ -1,0 +1,3 @@
+<launch>
+  <node pkg="lateral_controller" type="lateral_lower_controller.py" name="lateral_lower_controller" output="screen"/>
+</launch>
