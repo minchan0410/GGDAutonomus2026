@@ -37,8 +37,8 @@ class LaneDetector:
 
         # 현재 파일의 위치(bev 폴더)를 기준으로 npy 파일 경로 설정
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        matrix_path = os.path.join(current_dir, '/bev/bev_matrix.npy')
-        size_path = os.path.join(current_dir, '/bev/bev_size.npy')
+        matrix_path = os.path.join(current_dir, 'bev/bev_matrix.npy')
+        size_path = os.path.join(current_dir, 'bev/bev_size.npy')
 
         if self.cam_mode:
             if os.path.exists(matrix_path) and os.path.exists(size_path):

@@ -3,7 +3,7 @@ import os
 
 def main():
     # 0번은 기본 웹캠입니다.
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(2)
 
     if not cap.isOpened():
         print("카메라를 열 수 없습니다.")
