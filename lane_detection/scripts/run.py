@@ -30,6 +30,30 @@ class LaneDetector:
         self.cluster_colors = [(0, 0, 255), (0, 255, 0), (255, 0, 0), (0, 255, 255), (255, 0, 255)]
         self.bridge = CvBridge() # CvBridge 객체 생성
 
+        # --- [추가] BEV Matrix (.npy) 로드 ---
+        self.is_matrix_loaded = False
+        self.H = None
+        self.bev_size = None
+
+        # 현재 파일의 위치(bev 폴더)를 기준으로 npy 파일 경로 설정
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        matrix_path = os.path.join(current_dir, 'bev/bev_matrix.npy')
+        size_path = os.path.join(current_dir, 'bev/bev_size.npy')
+
+        if self.cam_mode:
+            if os.path.exists(matrix_path) and os.path.exists(size_path):
+                try:
+                    self.H = np.load(matrix_path)
+                    self.bev_size = np.load(size_path) # [width, height]
+                    self.is_matrix_loaded = True
+                    rospy.loginfo(f"BEV Matrix Loaded: {matrix_path}")
+                    rospy.loginfo(f"Target Size: {self.bev_size}")
+                except Exception as e:
+                    rospy.logwarn(f"Failed to load matrix files: {e}")
+            else:
+                rospy.logwarn(f"NPY files not found in {current_dir}. Using default hardcoded transform.")
+        # -------------------------------------
+
         # Publisher
         self.angle_pub = rospy.Publisher(self.output_topic, Int16, queue_size=10)
 
@@ -39,16 +63,22 @@ class LaneDetector:
             self.image_sub = rospy.Subscriber(self.camera_topic, Image, self.image_callback)
         else:
             rospy.loginfo("Camera Mode: OFF. Using Video File.")
-            # 파일 경로 설정 (기존 로직)
             try:
-
+                # 패키지 경로 탐색 (단순화된 경로 탐색 로직 사용 권장)
+                # 여기서는 기존 로직 유지
                 script_dir = os.path.dirname(os.path.abspath(__file__))
-                package_dir = os.path.dirname(script_dir)
-                src_dir = os.path.dirname(package_dir)
+                package_dir = os.path.dirname(script_dir) # scripts
+                src_dir = os.path.dirname(package_dir)    # package root
+                # running_data 폴더 위치에 맞춰 수정 필요할 수 있음
                 self.video_path = os.path.join(src_dir, "runnig_data", video_name)
 
+                # 만약 위 경로 로직이 복잡하다면 절대 경로를 확인해보세요.
                 if not os.path.exists(self.video_path):
-                    raise FileNotFoundError(f"경로에 파일이 없습니다: {self.video_path}")
+                     # fallback: 현재 스크립트 기준 상위 폴더 등 탐색
+                     self.video_path = os.path.join(package_dir, "runnig_data", video_name)
+
+                if not os.path.exists(self.video_path):
+                     raise FileNotFoundError(f"경로에 파일이 없습니다: {self.video_path}")
                 
                 self.video_source = self.video_path
                 rospy.loginfo(f"Video Path : {self.video_path}")           
@@ -70,32 +100,46 @@ class LaneDetector:
         if total_weight == 0: return 0.0
         return total_weighted_angle / total_weight
 
-    # --- [핵심] 카메라 콜백 함수 ---
     def image_callback(self, msg):
         try:
-            # ROS Image 메시지를 OpenCV(bgr8) 포맷으로 변환
             frame = self.bridge.imgmsg_to_cv2(msg, "bgr8")
             self.process_frame(frame)
         except CvBridgeError as e:
             rospy.logerr(f"CvBridge Error: {e}")
 
-    # --- [핵심] 이미지 처리 공통 함수 (기존 run 루프 내부 로직) ---
     def process_frame(self, frame):
-        # 1. 전처리 준비
         w = frame.shape[1]
         h = frame.shape[0]
-        roi_h = int(h * self.height_usage_ratio)
-        start_y = h - roi_h
-        
-        src_pts = np.float32([[0, 0], [w, 0], [w, roi_h], [0, roi_h]])
-        shrink_pixel = int(w * self.bottom_shrink_ratio / 2)
-        dst_pts = np.float32([[0, 0], [w, 0], [w - shrink_pixel, roi_h], [shrink_pixel, roi_h]])
-        M = cv2.getPerspectiveTransform(src_pts, dst_pts)
-        
-        # 2. BEV 변환 및 엣지 검출
-        roi_img = frame[start_y:h, 0:w]
-        bev_img = cv2.warpPerspective(roi_img, M, (w, roi_h), flags=cv2.INTER_LINEAR)
-        
+
+        # ---------------------------------------------------------
+        # 1. BEV 변환 (NPY 파일 사용 vs 기존 하드코딩 방식 분기)
+        # ---------------------------------------------------------
+        if self.cam_mode and self.is_matrix_loaded:
+            # [방법 A] NPY 매트릭스 사용 (Full FOV)
+            # 저장된 크기(new_w, new_h)로 전체 변환
+            target_w, target_h = int(self.bev_size[0]), int(self.bev_size[1])
+            bev_img = cv2.warpPerspective(frame, self.H, (target_w, target_h), flags=cv2.INTER_LINEAR)
+            
+            # 후처리를 위한 높이 정보 갱신
+            roi_h = target_h 
+            roi_w = target_w
+        else:
+            # [방법 B] 기존 하드코딩 방식 (Video 모드거나 파일 없을 때)
+            roi_h = int(h * self.height_usage_ratio)
+            start_y = h - roi_h
+            
+            src_pts = np.float32([[0, 0], [w, 0], [w, roi_h], [0, roi_h]])
+            shrink_pixel = int(w * self.bottom_shrink_ratio / 2)
+            dst_pts = np.float32([[0, 0], [w, 0], [w - shrink_pixel, roi_h], [shrink_pixel, roi_h]])
+            M = cv2.getPerspectiveTransform(src_pts, dst_pts)
+            
+            roi_img = frame[start_y:h, 0:w]
+            bev_img = cv2.warpPerspective(roi_img, M, (w, roi_h), flags=cv2.INTER_LINEAR)
+            roi_w = w
+
+        # ---------------------------------------------------------
+        # 2. 이미지 처리 (엣지 검출)
+        # ---------------------------------------------------------
         gray = cv2.cvtColor(bev_img, cv2.COLOR_BGR2GRAY)
         blur = cv2.GaussianBlur(gray, (7, 7), 5)
         edges = cv2.Canny(blur, 50, 150)
@@ -106,12 +150,16 @@ class LaneDetector:
         edges = cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=1)
         
         lines = cv2.HoughLinesP(edges, 1, np.pi/180, 40, minLineLength=30, maxLineGap=20)
+        
+        # 시각화용 이미지
         edges_color = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
         bev_viz = bev_img.copy()
         
         largest_cluster_data = [] 
         
+        # ---------------------------------------------------------
         # 3. 라인 분석 및 DBSCAN
+        # ---------------------------------------------------------
         if lines is not None:
             data_angles = []
             valid_indices = []
@@ -162,7 +210,9 @@ class LaneDetector:
                                 mid_y = (y1 + y2) / 2.0
                                 largest_cluster_data.append((angle, mid_y))
 
+        # ---------------------------------------------------------
         # 4. 결과 발행 및 시각화
+        # ---------------------------------------------------------
         weighted_avg_angle = self.calculate_weighted_average_angle(largest_cluster_data)
         current_avg_angle = weighted_avg_angle if weighted_avg_angle is not None else 0.0
 
@@ -170,8 +220,8 @@ class LaneDetector:
         angle_msg.data = int(current_avg_angle)
         self.angle_pub.publish(angle_msg)
 
-        # 화살표 그리기
-        arrow_start_pt = (w // 2, roi_h - 50)
+        # 화살표 그리기 (bev 높이에 맞춰 하단 중앙 위치 조정)
+        arrow_start_pt = (roi_w // 2, roi_h - 50) 
         arrow_len = 100
         angle_rad = math.radians(current_avg_angle)
         arrow_end_x = int(arrow_start_pt[0] + arrow_len * math.sin(angle_rad))
@@ -179,11 +229,18 @@ class LaneDetector:
         
         cv2.arrowedLine(edges_color, arrow_start_pt, (arrow_end_x, arrow_end_y), (0, 255, 255), 3, tipLength=0.3)
         cv2.arrowedLine(bev_viz, arrow_start_pt, (arrow_end_x, arrow_end_y), (0, 255, 255), 3, tipLength=0.3)
-        cv2.putText(bev_viz, f"Avg Angle: {int(current_avg_angle)}", (10, 30), 
+        cv2.putText(bev_viz, f"Avg Angle: {int(current_avg_angle)}", (10, 50), 
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
 
         combined_result = cv2.hconcat([edges_color, bev_viz])
-        cv2.imshow("Lane Detection Result", combined_result)
+        
+        # [중요] Full FOV 이미지는 너무 클 수 있으므로 화면 출력 시 리사이즈
+        if combined_result.shape[1] > 1920 or combined_result.shape[0] > 1080:
+             display_img = cv2.resize(combined_result, (1280, int(1280 * combined_result.shape[0] / combined_result.shape[1])))
+        else:
+             display_img = combined_result
+
+        cv2.imshow("Lane Detection Result", display_img)
 
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q'):
@@ -192,10 +249,8 @@ class LaneDetector:
 
     def run(self):
         if self.cam_mode:
-            # 카메라 모드: 콜백만 기다리면 되므로 spin() 사용
             rospy.spin()
         else:
-            # 파일 모드: 직접 루프를 돌며 파일 읽기
             rate = rospy.Rate(30)
             while not rospy.is_shutdown() and self.cap.isOpened():
                 ret, frame = self.cap.read()
