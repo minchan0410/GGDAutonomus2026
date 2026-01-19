@@ -3,15 +3,15 @@
 import rospy
 from std_msgs.msg import Float32, Int16
 
-POT_LEFT_MAX =              590
-POT_RIGHT_MAX =             420   # potentiometer
+POT_LEFT_MAX =              561
+POT_RIGHT_MAX =             413  # potentiometer
 POT_TOTAL_RANGE_DEGREE =    270
 POT_CENTER = (POT_LEFT_MAX + POT_RIGHT_MAX) / 2.0
 
 GT_LEFT_MAX  =  22.5
 GT_RIGHT_MAX = -22.5  # degree
 
-Kp, Ki, Kd, u_max = 6.0, 3.0, 0.0, 255
+Kp, Ki, Kd, u_max = 14.0, 0.0, 1.0, 255
 MARGIN = 1.5  # degree
 
 
@@ -67,7 +67,7 @@ class LowerController:
 
     def cb_desired_steer(self, msg):
         # 기존 코드 유지: 부호 반전 포함
-        self.des_steer = -max(min(float(msg.data), GT_LEFT_MAX), GT_RIGHT_MAX)
+        self.des_steer = max(min(float(msg.data), GT_LEFT_MAX), GT_RIGHT_MAX)
 
     def cb_potentiometer(self, msg):
         self.cur_steer = self.pot2deg(msg.data)

@@ -1,5 +1,5 @@
 # Running mode
-cam_mode: True
+cam_mode: False
 
 # Pub / Sub Topic name
 camera_topic: "/usb_cam/image_raw"
