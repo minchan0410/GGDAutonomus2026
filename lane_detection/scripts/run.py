@@ -2,16 +2,17 @@
 # -*- coding: utf-8 -*-
 
 import rospy
+import rospkg
+import os
+import sys
+import math
+import time
+import numpy as np
+import cv2
+from cv_bridge import CvBridge, CvBridgeError # ROS 이미지 <-> OpenCV 변환
 from std_msgs.msg import Int16
 from sensor_msgs.msg import Image  # 카메라 토픽용 메시지 타입
-from cv_bridge import CvBridge, CvBridgeError # ROS 이미지 <-> OpenCV 변환
-import cv2
-import numpy as np
-import os
-import math
 from sklearn.cluster import DBSCAN
-import sys
-import rospkg
 
 class LaneDetector:
     def __init__(self):
@@ -103,7 +104,11 @@ class LaneDetector:
     def image_callback(self, msg):
         try:
             frame = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+            start_t = time.time()          
             self.process_frame(frame)
+            end_t = time.time()
+            diff = end_t - start_t
+            rospy.loginfo(f"Process Time: {diff * 1000:.2f} ms")
         except CvBridgeError as e:
             rospy.logerr(f"CvBridge Error: {e}")
 
@@ -258,7 +263,12 @@ class LaneDetector:
                     self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                     continue
                 
+                start_t = time.time()          
                 self.process_frame(frame)
+                end_t = time.time()
+                diff = end_t - start_t
+                rospy.loginfo(f"Process Time: {diff * 1000:.2f} ms")
+
                 rate.sleep()
             
             self.cap.release()

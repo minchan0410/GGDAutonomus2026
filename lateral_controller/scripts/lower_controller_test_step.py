@@ -3,7 +3,7 @@ import rospy
 from std_msgs.msg import Int16
 
 AMP = 20          # deg (원하면 15 등으로 바꿔)
-PERIOD = 5.0      # seconds (5초 주기)
+PERIOD = 3.0      # seconds (5초 주기)
 HZ = 20           # publish rate
 
 class TestSquare:
