@@ -10,7 +10,7 @@ project(lateral_controller)
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
-  std_smgs
+  std_msgs
 )
 
 ## System dependencies are found with CMake's conventions
