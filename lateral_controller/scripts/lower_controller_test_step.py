@@ -8,7 +8,7 @@ HZ = 20           # publish rate
 
 class TestSquare:
     def __init__(self):
-        self.pub = rospy.Publisher("/des_steer", Int16, queue_size=1)
+        self.pub = rospy.Publisher("/lane_steer", Int16, queue_size=1)
         self.rate = rospy.Rate(HZ)
         self.t0 = rospy.Time.now().to_sec()
 

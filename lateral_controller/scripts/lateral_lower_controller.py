@@ -50,7 +50,7 @@ class LowerController:
         self.cur_steer = 0.0
         self.pid = PID(Kp, Ki, Kd, u_max)
 
-        rospy.Subscriber("/des_steer", Int16, self.cb_desired_steer, queue_size=1)
+        rospy.Subscriber("/lane_steer", Int16, self.cb_desired_steer, queue_size=1)
         rospy.Subscriber("/potentiometer", Int16, self.cb_potentiometer, queue_size=1)
 
         # motor command
@@ -59,7 +59,7 @@ class LowerController:
         # NEW: publish desired/cur steer + pwm
         self.des_steer_pub = rospy.Publisher("/des_steer_deg", Float32, queue_size=1)
         self.cur_steer_pub = rospy.Publisher("/cur_steer_deg", Float32, queue_size=1)
-        self.pwm_pub       = rospy.Publisher("/steer_pwm", Int16, queue_size=1)
+        self.pwm_pub       = rospy.Publisher("/motor_cmd_steer", Int16, queue_size=1)
 
         self.last = rospy.Time.now()
         hz = 20.0

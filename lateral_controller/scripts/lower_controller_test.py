@@ -6,7 +6,7 @@ from std_msgs.msg import Int16
 class Test:
     def __init__(self):
         self.motor_cmd_steer_pub = rospy.Publisher(
-            "/des_steer", Int16, queue_size=1
+            "/lane_steer", Int16, queue_size=1
         )
 
         self.rate = rospy.Rate(20)  # 20 Hz

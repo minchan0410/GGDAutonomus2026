@@ -65,27 +65,37 @@ class PreFinalPlanner:
 
     def run(self):
         r = rospy.Rate(self.rate_hz)
+
         while not rospy.is_shutdown():
             with self.lock:
-                mode = self.mode
+                mode = self.mode  # "DEFAULT" | "PRE" | "FINAL"
                 lane_steer = self.last_lane_steer if self.lane_steer_received else 0
 
-            if mode == "d":
+            # ---- outputs by mode ----
+            if mode == "DEFAULT":
                 des_steer = self.default_steer
                 motor_cmd = self.default_motor
 
-            elif mode == "p":
-                des_steer = lane_steer      # pre: lane_steer 패스스루 (일단)
+            elif mode == "PRE":
+                # pre: lane_steer 패스스루 + 모터 상수로 힘
+                des_steer = lane_steer
                 motor_cmd = self.pre_motor_cmd
 
-            else:  # mode == "f"
+            elif mode == "FINAL":
                 # TODO: final 로직 나중에 구현
+                des_steer = 0
+                motor_cmd = 0
+
+            else:
+                # safety fallback
                 des_steer = 0
                 motor_cmd = 0
 
             self.pub_des_steer.publish(Int16(des_steer))
             self.pub_motor.publish(Int16(motor_cmd))
+
             r.sleep()
+
 
 if __name__ == "__main__":
     node = PreFinalPlanner()
