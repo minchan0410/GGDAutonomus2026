@@ -1,0 +1,13 @@
+pre_final_planner:
+  # loop
+  rate_hz: 20
+
+  # mode outputs
+  pre_motor_cmd_long: 80
+  default_steer: 0
+  default_motor_cmd_long: 0
+
+  # topics (param으로 바꾸고 싶으면 코드에서 읽어야 함)
+  topic_lane_steer_in: /lane_steer
+  topic_des_steer_out: /des_steer
+  topic_motor_cmd_long_out: /motor_cmd_long
