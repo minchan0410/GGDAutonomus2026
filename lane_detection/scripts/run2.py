@@ -7,7 +7,7 @@ from sensor_msgs.msg import Image
 from std_msgs.msg import Int16 
 from cv_bridge import CvBridge, CvBridgeError
 from sklearn.cluster import DBSCAN
-from collections import deque  # [추가] 큐(Queue) 자료구조 사용
+from collections import deque
 
 # ==========================================
 # 설정 변수
@@ -54,9 +54,7 @@ class LaneDetector:
         self.bridge = CvBridge()
         self.image_sub = rospy.Subscriber(IMAGE_TOPIC, Image, self.image_callback)
         
-        # [변경] Low Pass Filter 설정을 이동 평균(Moving Average) 방식으로 변경
-        # window_size가 클수록 부드럽지만 반응이 느려짐 (보통 5~10 추천)
-        self.window_size = 15
+        self.window_size = 10
         self.steer_history = deque(maxlen=self.window_size)
         
         print(f"Waiting for image topic: {IMAGE_TOPIC}...")
@@ -81,7 +79,6 @@ class LaneDetector:
 
         features = np.array(features)
         
-        # DBSCAN 파라미터
         weight_angle = 100.0  
         weight_dist  = 0.20   
         
@@ -155,7 +152,15 @@ class LaneDetector:
         # 3. Hough Transform
         lines = cv2.HoughLinesP(mask_roi_applied, rho=1, theta=np.pi/180, threshold=50, minLineLength=50, maxLineGap=50)
         mask_bgr = cv2.cvtColor(mask_roi_applied, cv2.COLOR_GRAY2BGR)
+        
+        # [기존 ROI 그리기]
         cv2.polylines(mask_bgr, roi_verts, isClosed=True, color=(0, 255, 0), thickness=2)
+
+        # ========================================================
+        # [추가됨] 화면 중앙 세로선 (단순 시각화용)
+        # 흰색 선(255, 255, 255)으로 중앙 상단(0)부터 하단(h)까지 그림
+        # ========================================================
+        cv2.line(mask_bgr, (cx, 0), (cx, h), (255, 255, 255), 1)
 
         # 4. Filter & Score
         filtering_slope = 0.3 
@@ -198,26 +203,21 @@ class LaneDetector:
         
         final_midpoint = int((left_mid_point + right_mid_point) / 2)
 
-        # --------------------------------------------------------
-        # [변경됨] 단순 이동 평균(SMA) 필터 적용
-        # --------------------------------------------------------
+        # 이동 평균(SMA) 필터 적용
         image_center_x = w // 2
-        # raw_offset = final_midpoint - image_center_x
         
-        # 큐에 현재 데이터 추가 (꽉 차면 가장 오래된 것 자동 삭제)
         self.steer_history.append(final_midpoint)
         
-        # 큐에 있는 값들의 평균 계산
         if len(self.steer_history) > 0:
             filtered_midpoint = int(sum(self.steer_history) / len(self.steer_history))
         else:
             filtered_midpoint = final_midpoint 
         
-        pubdata = int((filtered_midpoint - image_center_x) * 0.3 )
+        pubdata = int(-(filtered_midpoint - image_center_x) * 0.15 )
         msg_steer = Int16()
         msg_steer.data = pubdata
         self.pub_steer.publish(msg_steer)
-        # --------------------------------------------------------
+        print(pubdata)
 
         cv2.circle(mask_bgr, (filtered_midpoint, y_mid), 20, (255, 255, 0), -1)
         cv2.putText(mask_bgr, f"Offset: {msg_steer.data}", (filtered_midpoint - 80, y_mid - 40), 

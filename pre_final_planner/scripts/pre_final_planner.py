@@ -12,7 +12,7 @@ class PreFinalPlanner:
 
         # ---- params ----
         self.rate_hz = rospy.get_param("~rate_hz", 20)
-        self.pre_motor_cmd = int(rospy.get_param("~pre_motor_cmd_long", 80))
+        self.pre_motor_cmd = int(rospy.get_param("~pre_motor_cmd_long", 255))
         self.default_steer = int(rospy.get_param("~default_steer", 0))
         self.default_motor = int(rospy.get_param("~default_motor_cmd_long", 0))
 

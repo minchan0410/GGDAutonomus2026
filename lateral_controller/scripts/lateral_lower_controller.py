@@ -3,8 +3,8 @@
 import rospy
 from std_msgs.msg import Float32, Int16
 
-POT_LEFT_MAX =              561
-POT_RIGHT_MAX =             413  # potentiometer
+POT_LEFT_MAX =              576
+POT_RIGHT_MAX =             419  # potentiometer
 POT_TOTAL_RANGE_DEGREE =    270
 POT_CENTER = (POT_LEFT_MAX + POT_RIGHT_MAX) / 2.0
 
@@ -50,7 +50,7 @@ class LowerController:
         self.cur_steer = 0.0
         self.pid = PID(Kp, Ki, Kd, u_max)
 
-        rospy.Subscriber("/lane_steer", Int16, self.cb_desired_steer, queue_size=1)
+        rospy.Subscriber("/des_steer", Int16, self.cb_desired_steer, queue_size=1)
         rospy.Subscriber("/potentiometer", Int16, self.cb_potentiometer, queue_size=1)
 
         # motor command
