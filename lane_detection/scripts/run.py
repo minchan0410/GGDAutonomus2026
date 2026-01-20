@@ -15,12 +15,12 @@ import rospkg
 
 class LaneDetector:
     def __init__(self):
-        rospy.init_node('lane_detector_node', anonymous=False)
+        rospy.init_node('lane_detector', anonymous=False)
         
         # Params
         self.cam_mode = rospy.get_param("~cam_mode", False)
         self.camera_topic = rospy.get_param("~camera_topic", "/usb_cam/image_raw")
-        self.output_topic = rospy.get_param("~output_topic", "lane_deg")
+        self.output_topic = rospy.get_param("~output_topic", "lane_steer")
         
         self.height_usage_ratio = rospy.get_param("~height_usage_ratio", 0.4)
         self.bottom_shrink_ratio = rospy.get_param("~bottom_shrink_ratio", 0.68)
