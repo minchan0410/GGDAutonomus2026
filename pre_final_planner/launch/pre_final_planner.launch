@@ -1,0 +1,3 @@
+<launch>
+  <node pkg="pre_final_planner" type="pre_final_planner.py" name="pre_final_planner" output="screen"/>
+</launch>
