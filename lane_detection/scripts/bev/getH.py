@@ -10,7 +10,7 @@ SAVE_SIZE_PATH = os.path.join(current_dir, 'bev_size.npy')
 
 # --- [설정] 사용자 환경에 맞게 수정하세요 ---
 CHECKERBOARD = (8, 6)  # 체커보드 코너 개수
-TOP_CROP_RATIO = 0.45  # 상단 몇 %를 날릴 것인지 (0.45 = 상단 45% 잘라냄)
+TOP_CROP_RATIO = 0.50  # 상단 몇 %를 날릴 것인지 (0.45 = 상단 45% 잘라냄)
 SCALE = 10            # BEV 변환 시 격자 하나의 픽셀 크기 (해상도)
 # ----------------------------------------
 
