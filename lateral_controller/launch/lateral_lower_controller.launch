@@ -1,3 +1,19 @@
 <launch>
-  <node pkg="lateral_controller" type="lateral_lower_controller.py" name="lateral_lower_controller" output="screen"/>
+  <!-- toggle -->
+  <arg name="with_rqt" default="true" />
+
+  <!-- lower controller -->
+  <node pkg="lateral_controller"
+        type="lateral_lower_controller.py"
+        name="lateral_lower_controller"
+        output="screen" />
+
+  <!-- rqt (multiplot perspective) -->
+  <node if="$(arg with_rqt)"
+        pkg="rqt_gui"
+        type="rqt_gui"
+        name="rqt_lower_multiplot"
+        args="--perspective-file $(find lateral_controller)/config/lower_controller_multiplot.perspective"
+        output="screen"
+        required="false" />
 </launch>
