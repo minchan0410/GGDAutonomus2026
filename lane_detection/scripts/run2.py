@@ -213,8 +213,9 @@ class LaneDetector:
         else:
             filtered_midpoint = final_midpoint 
         
+        pubdata = int((filtered_midpoint - image_center_x) * 0.3 )
         msg_steer = Int16()
-        msg_steer.data = filtered_midpoint - image_center_x
+        msg_steer.data = pubdata
         self.pub_steer.publish(msg_steer)
         # --------------------------------------------------------
 
