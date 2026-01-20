@@ -40,26 +40,28 @@ class PreFinalPlanner:
             self.lane_steer_received = True
 
     def keyboard_loop(self):
+        key_to_mode = {
+            "d": "DEFAULT",
+            "p": "PRE",
+            "f": "FINAL",
+        }
+
         while not rospy.is_shutdown():
             line = sys.stdin.readline()
             if not line:
                 break
 
             cmd = line.strip().lower()
-            if cmd not in ("d", "p", "f"):
-                # ignore everything else (no log)
+            if cmd not in key_to_mode:
+                rospy.logwarn("invalid key inturrupt")
                 continue
 
+            new_mode = key_to_mode[cmd]
             with self.lock:
-                if self.mode != cmd:
-                    self.mode = cmd
-                    # mode change log only for valid keys
-                    if cmd == "d":
-                        rospy.loginfo("[pre_final_planner] mode -> d (default)")
-                    elif cmd == "p":
-                        rospy.loginfo("[pre_final_planner] mode -> p (pre)")
-                    else:
-                        rospy.loginfo("[pre_final_planner] mode -> f (final)")
+                if self.mode != new_mode:
+                    self.mode = new_mode
+                    rospy.loginfo(f'pre_final_planner set to mode "{new_mode}"')
+
 
     def run(self):
         r = rospy.Rate(self.rate_hz)
