@@ -2,7 +2,7 @@
 
 2D LiDAR를 활용하여 차량을 검출하는 패키지. **Euclidean Clustering**과 **Box Fitting**을 통해 차량을 detection.
 ![Demo GIF](./imgs/test.gif)
-<br>
+<br><br>
 
 ## File Structure
 
