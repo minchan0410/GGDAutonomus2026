@@ -1,0 +1,24 @@
+image_topic: /usb_cam/image_raw
+model_path: /home/jihun/kkdws/src/GGDAutonomus2026/object_detector/config/yolo26s.pt
+conf_thres: 0.4
+device: "cpu"
+
+car_class_name: "car"
+traffic_class_name: "traffic light"
+
+car_topic: /car_detection
+traffic_topic: /traffic_detection
+
+overlay:
+  enable: true
+  topic: /yolo_overlay/image
+  draw_labels: true
+  thickness: 2
+  font_scale: 0.6
+  show_conf: true
+  car_color_bgr: [0, 255, 0]
+  traffic_color_bgr: [0, 255, 255]
+
+camera:
+  width: 1280
+  height: 720

@@ -1,0 +1,24 @@
+sub_car_topic: /car_detection
+pub_car_projected_topic: /car_projected
+pub_markers_topic: /car_projected_markers
+
+frame_id: base_link
+select_nearest: true
+
+camera:
+  fx: 928.4324
+  fy: 928.4279
+  cx: 638.6842
+  cy: 359.8989
+  height: 0.35
+  pitch: 0.15
+
+marker:
+  enable: true
+  ns: car_projected
+  id: 0
+  type: sphere
+  scale: 0.3
+  lifetime: 0.2
+  color_rgba: [1.0, 0.2, 0.2, 1.0]
+  z: 0.0
