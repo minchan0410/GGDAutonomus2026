@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(laser_clustering)
+project(laser_detection)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 add_compile_options(-std=c++14)
@@ -139,7 +139,7 @@ include_directories(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-add_executable(clustering src/clustering.cpp)
+add_executable(detection src/detection.cpp)
 add_executable(occ_grid src/occ_grid.cpp)
 
 ## Rename C++ executable without prefix
@@ -153,7 +153,7 @@ add_executable(occ_grid src/occ_grid.cpp)
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-target_link_libraries(clustering
+target_link_libraries(detection
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
 )
