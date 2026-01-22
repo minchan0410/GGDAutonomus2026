@@ -153,6 +153,64 @@ Visualization Manager:
       Topic: /detection_poses
       Unreliable: false
       Value: true
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /parking_destination_marker
+      Name: ParkingDestination
+      Queue Size: 100
+      Value: true
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /stanley_debug
+      Name: StanleyDebug
+      Queue Size: 100
+      Value: true
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /filtered_points_marker
+      Name: FilteredPointsCircles
+      Queue Size: 100
+      Value: true
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /filtered_points_marker
+      Name: FilteredPointsLine
+      Queue Size: 100
+      Value: true
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /stanley_debug
+      Name: StanleyMotionYaw
+      Queue Size: 100
+      Value: true
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /stanley_debug
+      Name: StanleyPathYaw
+      Queue Size: 100
+      Value: true
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /stanley_debug
+      Name: StanleyErrors
+      Queue Size: 100
+      Value: true
+    - Class: rviz/Path
+      Enabled: true
+      Name: StanleyPath
+      Topic: /stanley_path
+      Queue Size: 10
+      Color: 255; 255; 0
+      Alpha: 1
+      Buffer Length: 1
+      Line Style: Lines
+      Line Width: 0.03
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Style: None
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
