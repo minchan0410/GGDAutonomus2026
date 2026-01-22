@@ -6,6 +6,15 @@
 ### Team   : **AJOU NICE**
 ### Result :  ~ prize
 
+
+| Name | developement Role |
+| :--- | :--- |
+| `변지훈` | aasdfasdf |
+| `한민규` | aasdfasdf |
+| `정민찬` | aasdfasdf |
+| `구동열` | aasdfasdf |
+| `전희중` | aasdfasdf |
+
 <br>
 
 ## **Hardware Info** 
