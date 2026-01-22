@@ -6,6 +6,10 @@
   <node pkg="object_detector" type="object_projection.py" name="object_projection" output="screen">
     <rosparam file="$(find object_detector)/config/object_projection.yaml" command="load"/>
   </node>
+   
+  <node pkg="object_detector" type="traffic_detection.py" name="traffic_detection" output="screen" ns="traffic_detection" />
+    <rosparam command="load" file="$(find object_detector)/config/traffic_detection.yaml" ns="traffic_detection"/>
+  </node>
 
   <node pkg="rviz" type="rviz" name="rviz"
         args="-d $(find object_detector)/config/object_projection.rviz" output="screen"/>

@@ -21,11 +21,9 @@ class ObjectDetectionNode:
         self.conf_thres = float(rospy.get_param("~conf_thres"))
         self.device = rospy.get_param("~device")
 
+        # ---- only car class ----
         self.car_name = rospy.get_param("~car_class_name")
-        self.tl_name = rospy.get_param("~traffic_class_name")
-
         self.car_topic = rospy.get_param("~car_topic")
-        self.tl_topic = rospy.get_param("~traffic_topic")
 
         # 반드시 20Hz로 publish
         self.pub_rate = float(rospy.get_param("~pub_rate", 20.0))
@@ -39,9 +37,7 @@ class ObjectDetectionNode:
         self.ov_show_conf = bool(rospy.get_param("~overlay/show_conf", True))
 
         car_color = rospy.get_param("~overlay/car_color_bgr", [0, 255, 0])
-        tl_color = rospy.get_param("~overlay/traffic_color_bgr", [0, 255, 255])
         self.ov_car_color = tuple(int(x) for x in car_color)
-        self.ov_tl_color = tuple(int(x) for x in tl_color)
 
         self.model = YOLO(self.model_path)
 
@@ -50,11 +46,9 @@ class ObjectDetectionNode:
             names = {i: n for i, n in enumerate(names)}
 
         self.car_ids = [i for i, n in names.items() if n == self.car_name]
-        self.tl_ids = [i for i, n in names.items() if n == self.tl_name]
-        self.filter_ids = sorted(list(set(self.car_ids + self.tl_ids)))
+        self.filter_ids = sorted(list(set(self.car_ids)))
 
         self.pub_car = rospy.Publisher(self.car_topic, Detection2DArray, queue_size=1)
-        self.pub_tl = rospy.Publisher(self.tl_topic, Detection2DArray, queue_size=1)
         self.pub_overlay = rospy.Publisher(self.ov_topic, Image, queue_size=1) if self.ov_enable else None
 
         # 최신 프레임만 덮어쓰기 (캐시/큐 안 쌓이게)
@@ -68,9 +62,9 @@ class ObjectDetectionNode:
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.pub_rate), self.on_timer)
 
         rospy.loginfo(f"[object_detection] model={self.model_path} conf={self.conf_thres} device={self.device}")
-        rospy.loginfo(f"[object_detection] car_ids={self.car_ids} tl_ids={self.tl_ids} filter_ids={self.filter_ids}")
+        rospy.loginfo(f"[object_detection] car_ids={self.car_ids} filter_ids={self.filter_ids}")
         rospy.loginfo(f"[object_detection] pub_rate={self.pub_rate}Hz")
-        rospy.loginfo(f"[object_detection] pub car={self.car_topic} tl={self.tl_topic} overlay={self.ov_topic if self.ov_enable else 'disabled'}")
+        rospy.loginfo(f"[object_detection] pub car={self.car_topic} overlay={self.ov_topic if self.ov_enable else 'disabled'}")
 
     def cb_img(self, msg: Image):
         try:
@@ -126,8 +120,6 @@ class ObjectDetectionNode:
 
         car_arr = Detection2DArray()
         car_arr.header = header
-        tl_arr = Detection2DArray()
-        tl_arr.header = header
 
         need_overlay = (
             self.ov_enable and
@@ -140,7 +132,6 @@ class ObjectDetectionNode:
         if frame is None:
             # 아직 이미지 못 받았어도 20Hz로 빈 토픽 계속 송신
             self.pub_car.publish(car_arr)
-            self.pub_tl.publish(tl_arr)
             return
 
         H, W = frame.shape[:2]
@@ -157,7 +148,6 @@ class ObjectDetectionNode:
             rospy.logwarn_throttle(1.0, f"[object_detection] YOLO predict failed: {e}")
             # 실패해도 20Hz 유지: 빈 배열 publish
             self.pub_car.publish(car_arr)
-            self.pub_tl.publish(tl_arr)
             return
 
         boxes = pred.boxes
@@ -179,14 +169,8 @@ class ObjectDetectionNode:
                     if need_overlay:
                         self.draw_box(overlay, x1, y1, x2, y2, self.car_name, p, self.ov_car_color)
 
-                if c in self.tl_ids:
-                    tl_arr.detections.append(det)
-                    if need_overlay:
-                        self.draw_box(overlay, x1, y1, x2, y2, self.tl_name, p, self.ov_tl_color)
-
         # 핵심: 매 틱마다 무조건 publish
         self.pub_car.publish(car_arr)
-        self.pub_tl.publish(tl_arr)
 
         if need_overlay:
             out_img = self.bridge.cv2_to_imgmsg(overlay, encoding="bgr8")
