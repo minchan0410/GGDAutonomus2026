@@ -1,19 +1,7 @@
-# ---- input/output topics ----
-image_topic: "/head_camera/image_raw"
-state_topic: "/traffic_light/state"
-
-# ---- yolo weights ----
-# 여기만 너가 찾은 .pt 절대경로로 바꿔서 넣어
-weights: "/kkdws/src/GGDAutonomus2026/object_detector/config/best_traffic_small_yolo.pt"
-
-# ---- inference params ----
+image_topic: /cam2/usb_cam/image_raw
+state_topic: /traffic_light/state
+weights: /home/vic/kkdws/src/object_detector/model/best_traffic_med_yolo.pt
 conf_th: 0.25
 iou_th: 0.45
-
-# ---- class filter ----
-# traffic light class id를 알면 숫자로 넣고, 모르면 -1 (최고 conf 박스 1개만 사용)
 traffic_light_class_id: -1
-
-# ---- box filter ----
-# 너무 작은 박스(노이즈) 제거용. 12*12=144 정도부터 시작
 min_box_area: 144

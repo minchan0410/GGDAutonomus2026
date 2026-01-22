@@ -6,7 +6,7 @@ import numpy as np
 import cv2
 
 from sensor_msgs.msg import Image
-from std_msgs.msg import Int16
+from std_msgs.msg import Int16, Header
 from cv_bridge import CvBridge
 
 from ultralytics import YOLO
@@ -82,6 +82,20 @@ class TrafficDetectionNode:
         # 박스 면적 필터 (너무 작은 점 검출 방지)
         self.min_box_area = int(rospy.get_param("~min_box_area", 12 * 12))
 
+        # overlay params
+        self.ov_enable = bool(rospy.get_param("~overlay/enable", True))
+        self.ov_topic = rospy.get_param("~overlay/topic", "/traffic_overlay/image")
+        self.ov_labels = bool(rospy.get_param("~overlay/draw_labels", True))
+        self.ov_thick = int(rospy.get_param("~overlay/thickness", 2))
+        self.ov_font = float(rospy.get_param("~overlay/font_scale", 0.7))
+        self.ov_show_conf = bool(rospy.get_param("~overlay/show_conf", True))
+
+        # 상태별 BGR 색
+        self.ov_color_red = tuple(int(x) for x in rospy.get_param("~overlay/red_bgr", [0, 0, 255]))
+        self.ov_color_yellow = tuple(int(x) for x in rospy.get_param("~overlay/yellow_bgr", [0, 255, 255]))
+        self.ov_color_green = tuple(int(x) for x in rospy.get_param("~overlay/green_bgr", [0, 255, 0]))
+        self.ov_color_unknown = tuple(int(x) for x in rospy.get_param("~overlay/unknown_bgr", [200, 200, 200]))
+
         if not self.weights:
             rospy.logerr("traffic_detection: ~weights is empty. Set YOLO weights path.")
             raise RuntimeError("weights not set")
@@ -90,9 +104,26 @@ class TrafficDetectionNode:
         self.model = YOLO(self.weights)
 
         self.pub_state = rospy.Publisher(self.state_topic, Int16, queue_size=1)
+        self.pub_overlay = rospy.Publisher(self.ov_topic, Image, queue_size=1) if self.ov_enable else None
         self.sub_img = rospy.Subscriber(self.image_topic, Image, self.cb_image, queue_size=1, buff_size=2**24)
 
         self.last_state = UNKNOWN
+
+    def _state_to_label_color(self, state: int):
+        if state == RED:
+            return "RED", self.ov_color_red
+        if state == YELLOW:
+            return "YELLOW", self.ov_color_yellow
+        if state == GREEN:
+            return "GREEN", self.ov_color_green
+        return "UNKNOWN", self.ov_color_unknown
+
+    def _draw_box(self, img, x1, y1, x2, y2, label_text, color):
+        cv2.rectangle(img, (x1, y1), (x2, y2), color, self.ov_thick)
+        if not self.ov_labels:
+            return
+        y = max(0, y1 - 6)
+        cv2.putText(img, label_text, (x1, y), cv2.FONT_HERSHEY_SIMPLEX, self.ov_font, color, 2, cv2.LINE_AA)
 
     def cb_image(self, msg: Image):
         try:
@@ -104,12 +135,13 @@ class TrafficDetectionNode:
         results = self.model.predict(frame, conf=self.conf_th, iou=self.iou_th, verbose=False)
 
         state = UNKNOWN
+        best_box = None
+        best_conf = None
 
         if results and len(results) > 0:
             r0 = results[0]
             boxes = getattr(r0, "boxes", None)
 
-            best_box = None
             best_score = -1.0
 
             if boxes is not None and boxes.xyxy is not None:
@@ -138,16 +170,39 @@ class TrafficDetectionNode:
                     if score > best_score:
                         best_score = score
                         best_box = (x1, y1, x2, y2)
+                        best_conf = score
 
             if best_box is not None:
                 x1, y1, x2, y2 = best_box
                 roi = frame[y1:y2, x1:x2]
                 state = hsv_color_vote(roi)
 
-        # 변경시에만 publish(스팸 줄임)
+        # state publish (변경시에만)
         if state != self.last_state:
             self.pub_state.publish(Int16(state))
             self.last_state = state
+
+        # overlay publish (구독자가 있을 때만)
+        if self.ov_enable and self.pub_overlay is not None and self.pub_overlay.get_num_connections() > 0:
+            overlay = frame.copy()
+
+            label, color = self._state_to_label_color(state)
+
+            if best_box is not None:
+                x1, y1, x2, y2 = best_box
+                if self.ov_show_conf and best_conf is not None:
+                    txt = f"{label} conf:{best_conf:.2f}"
+                else:
+                    txt = f"{label}"
+                self._draw_box(overlay, x1, y1, x2, y2, txt, color)
+            else:
+                # 박스가 없을 때도 상태를 화면에 띄우고 싶으면 좌상단 표시
+                txt = f"{label} (no bbox)"
+                cv2.putText(overlay, txt, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, self.ov_font, color, 2, cv2.LINE_AA)
+
+            out_img = self.bridge.cv2_to_imgmsg(overlay, encoding="bgr8")
+            out_img.header = msg.header
+            self.pub_overlay.publish(out_img)
 
     def spin(self):
         rospy.loginfo("[traffic_detection] started.")

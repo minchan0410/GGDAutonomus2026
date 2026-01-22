@@ -1,7 +1,7 @@
-image_topic: /usb_cam/image_raw
-model_path: kkdws/src/object_detector/config/yolo26s.pt
-conf_thres: 0.4
-device: "cpu"
+image_topic: /cam1/usb_cam/image_raw
+model_path: '/home/vic/kkdws/src/object_detector/model/yolo26s.pt'
+conf_thres: 0.1
+device: "0"
 
 car_class_name: "car"
 car_topic: /car_detection
