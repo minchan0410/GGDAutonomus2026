@@ -1,0 +1,4 @@
+<launch>
+  <node pkg="pre_final_planner" type="final_planner.py" name="final_planner" output="screen"/>
+  
+</launch>

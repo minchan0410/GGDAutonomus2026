@@ -1,4 +1,6 @@
-#!/usr/bin/env python3
+#!/home/vic/yoloenv/bin/python3
+# -*- coding: utf-8 -*-
+
 import rospy
 import numpy as np
 import cv2

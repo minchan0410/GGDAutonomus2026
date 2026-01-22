@@ -1,6 +1,12 @@
-image_topic: /cam2/usb_cam/image_raw
-state_topic: /traffic_light/state
-weights: /home/vic/kkdws/src/object_detector/model/best_traffic_med_yolo.pt
+# ---- input/output topics ----
+image_topic: "/cam2/usb_cam/image_raw"
+state_topic: "/traffic"
+
+# ---- yolo weights ----
+# 여기만 너가 찾은 .pt 절대경로로 바꿔서 넣어
+weights: "/home/vic/kkdws/src/object_detector/model/best_traffic_med_yolo.pt"
+
+# ---- inference params ----
 conf_th: 0.25
 iou_th: 0.45
 traffic_light_class_id: -1
