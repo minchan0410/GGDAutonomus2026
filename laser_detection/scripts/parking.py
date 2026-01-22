@@ -64,7 +64,7 @@ class Parking:
         self.filtered_points = None     # (2,2) numpy array
         self.reject_count = 0       # 유사성 실패 누적
         self.state = "default"
-        self.prev_state = "default"
+        self.prev_state = "lane_driving"
         key_thread = threading.Thread(target=self.keyboard_listener)
         key_thread.daemon = True
         key_thread.start()
@@ -178,6 +178,7 @@ class Parking:
                     rospy.loginfo(f"parking_planner -> RESUME {self.state}")
                 else:
                     rospy.loginfo("cannot resume (not in DEFAULT or no prev_state)")
+                    
     
     def lane_steer_callback(self, msg): self.lane_steer = msg.data
 

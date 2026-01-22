@@ -312,7 +312,7 @@ class Stanley:
         m.action = Marker.ADD
 
         m.pose.position.x = 1.0
-        m.pose.position.y = 2.5
+        m.pose.position.y = 5.0
         m.pose.position.z = 0.0
 
         m.scale.z = 0.35
