@@ -1,0 +1,25 @@
+pub_markers_topic: "/viz/ego_roi_markers"
+frame_id: "base_link"
+pub_rate: 20.0
+
+car:
+  length: 1.0
+  width: 0.5
+  height: 0.35
+  x: 0.0
+  y: 0.0
+  z: 0.275
+  color_rgba: [0.2, 0.7, 1.0, 0.6]
+
+roi:
+  x_min: 0.0
+  x_max: 1.0
+  y_min: -0.4
+  y_max: 0.4
+  thickness: 0.01
+  z: 0.005
+  color_rgba: [1.0, 1.0, 0.0, 0.25]
+
+axes:
+  enable: true
+  scale: 1.0

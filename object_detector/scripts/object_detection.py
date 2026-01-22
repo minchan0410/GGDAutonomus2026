@@ -121,14 +121,6 @@ class ObjectDetectionNode:
         car_arr = Detection2DArray()
         car_arr.header = header
 
-        need_overlay = (
-            self.ov_enable and
-            (self.pub_overlay is not None) and
-            (self.pub_overlay.get_num_connections() > 0) and
-            (frame is not None)
-        )
-        overlay = frame.copy() if need_overlay else None
-
         if frame is None:
             # 아직 이미지 못 받았어도 20Hz로 빈 토픽 계속 송신
             self.pub_car.publish(car_arr)
@@ -146,8 +138,12 @@ class ObjectDetectionNode:
             )[0]
         except Exception as e:
             rospy.logwarn_throttle(1.0, f"[object_detection] YOLO predict failed: {e}")
-            # 실패해도 20Hz 유지: 빈 배열 publish
             self.pub_car.publish(car_arr)
+            # 오버레이는 그냥 원본이라도 내보내고 싶으면 아래 유지
+            if self.ov_enable and (self.pub_overlay is not None):
+                out_img = self.bridge.cv2_to_imgmsg(frame, encoding="bgr8")
+                out_img.header = header
+                self.pub_overlay.publish(out_img)
             return
 
         boxes = pred.boxes
@@ -162,20 +158,36 @@ class ObjectDetectionNode:
                 y1 = int(np.clip(y1, 0, H - 1))
                 y2 = int(np.clip(y2, 0, H - 1))
 
-                det = self.make_det(header, x1, y1, x2, y2, c, p)
-
+                # car만 Detection2DArray에 넣음(=pub되는 것)
                 if c in self.car_ids:
+                    det = self.make_det(header, x1, y1, x2, y2, c, p)
                     car_arr.detections.append(det)
-                    if need_overlay:
-                        self.draw_box(overlay, x1, y1, x2, y2, self.car_name, p, self.ov_car_color)
 
         # 핵심: 매 틱마다 무조건 publish
         self.pub_car.publish(car_arr)
 
-        if need_overlay:
+        # --- 오버레이는 "pub된 car_arr" 기반으로만 그림 ---
+        if self.ov_enable and (self.pub_overlay is not None):
+            overlay = frame.copy()
+
+            for det in car_arr.detections:
+                cx = det.bbox.center.x
+                cy = det.bbox.center.y
+                w  = det.bbox.size_x
+                h  = det.bbox.size_y
+
+                x1 = int(np.clip(cx - w * 0.5, 0, W - 1))
+                x2 = int(np.clip(cx + w * 0.5, 0, W - 1))
+                y1 = int(np.clip(cy - h * 0.5, 0, H - 1))
+                y2 = int(np.clip(cy + h * 0.5, 0, H - 1))
+
+                score = det.results[0].score if len(det.results) > 0 else 0.0
+                self.draw_box(overlay, x1, y1, x2, y2, self.car_name, score, self.ov_car_color)
+
             out_img = self.bridge.cv2_to_imgmsg(overlay, encoding="bgr8")
             out_img.header = header
             self.pub_overlay.publish(out_img)
+
 
 
 if __name__ == "__main__":

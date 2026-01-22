@@ -27,7 +27,13 @@ class ObjectProjectionNode:
         self.cx = float(rospy.get_param("~camera/cx"))
         self.cy = float(rospy.get_param("~camera/cy"))
         self.h = float(rospy.get_param("~camera/height"))
-        self.pitch = float(rospy.get_param("~camera/pitch"))
+
+        # pitch convention: degrees in yaml, up=+, down=-
+        # backward compatible: if pitch_deg not set, use ~camera/pitch (radians)
+        if rospy.has_param("~camera/pitch_deg"):
+            self.pitch_rad = math.radians(float(rospy.get_param("~camera/pitch_deg")))
+        else:
+            self.pitch_rad = float(rospy.get_param("~camera/pitch", 0.0))
 
         # marker config (RViz visualization)
         self.mk_enable = bool(rospy.get_param("~marker/enable", True))
@@ -54,7 +60,8 @@ class ObjectProjectionNode:
 
         rospy.loginfo(
             f"[object_projection] sub={self.sub_car_topic} pub_pt={self.pub_pt_topic} "
-            f"pub_mk={self.pub_mk_topic if self.mk_enable else 'disabled'} pub_rate={self.pub_rate}Hz"
+            f"pub_mk={self.pub_mk_topic if self.mk_enable else 'disabled'} pub_rate={self.pub_rate}Hz "
+            f"pitch_rad={self.pitch_rad:.4f} (yaml pitch_deg: up=+, down=-)"
         )
 
     def cb(self, msg: Detection2DArray):
@@ -64,13 +71,20 @@ class ObjectProjectionNode:
     def project(self, u, v):
         # u,v : pixel coordinates
         beta = math.atan((u - self.cx) / self.fx)
+
+        # image-based downward angle (v grows downward)
         alpha_img = math.atan((v - self.cy) / self.fy)
-        alpha = self.pitch + alpha_img
+
+        # pitch convention: up=+, down=-  => downward angle decreases when pitch is positive
+        alpha = alpha_img - self.pitch_rad
+
         if alpha <= 1e-6:
             return None
+
         X = self.h / math.tan(alpha)
         if X <= 0:
             return None
+
         Y_right = X * math.tan(beta)
         Y_left = -Y_right
         return X, Y_left

@@ -10,8 +10,9 @@ camera:
   fy: 928.4279
   cx: 638.6842
   cy: 359.8989
-  height: 0.35
-  pitch: 0.15
+  height: 0.75
+  pitch_deg: -40.0   # 아래로 15도면 -15, 위로 15도면 +15
+
 
 marker:
   enable: true
