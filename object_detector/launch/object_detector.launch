@@ -11,11 +11,4 @@
     <rosparam command="load" file="$(find object_detector)/config/traffic_detection.yaml"/>
   </node>
 
-  <node pkg="object_detector" type="ego_roi_markers.py" name="ego_roi_markers" output="screen" >
-    <rosparam command="load" file="$(find object_detector)/config/ego_roi_markers.yaml"/>
-  </node>
-
-
-  <node pkg="rviz" type="rviz" name="rviz"
-        args="-d $(find object_detector)/config/object_projection.rviz" output="screen"/>
 </launch>

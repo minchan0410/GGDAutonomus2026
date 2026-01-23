@@ -13,7 +13,7 @@ final_planner_rviz:
     left: 10
     top: 10
     width: 450
-    height: 250
+    height: 150
     text_size: 18
     line_width: 2
     fg: [1.0, 1.0, 1.0, 1.0]
