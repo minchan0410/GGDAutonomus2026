@@ -1,0 +1,34 @@
+# topics
+lines_topic: /lane_lines_px
+target_topic: /lane_target_px
+grid_topic: /lane_bev/grid
+
+# frame
+frame_id: base_link
+
+# camera intrinsics
+fx: 928.4324
+fy: 928.4279
+cx: 638.6842
+cy: 359.8989
+
+# camera extrinsics
+cam_x_m: 0.0
+cam_y_m: 0.0
+cam_height_m: 1.20
+cam_roll_deg: 0.0
+cam_pitch_deg: 10.0
+cam_yaw_deg: 0.0
+
+# occupancy grid
+resolution: 0.05
+grid_w: 400
+grid_h: 400
+origin_x: 0.0
+origin_y: -10.0
+
+# drawing
+sample_n: 30
+target_radius_cells: 2
+max_range_x: 20.0
+publish_rate: 20.0
