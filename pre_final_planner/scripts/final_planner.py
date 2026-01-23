@@ -27,7 +27,6 @@ class FinalPlanner:
 
         self.rate_hz = rospy.get_param("~rate_hz", 20)
         self.default_motor = rospy.get_param("~default_motor", 0)
-        self.pre_motor = rospy.get_param("~pre_motor", 200)
         
 
         rospy.Subscriber("/lane_steer", Int16, self.lane_steer_callback, queue_size=1)
@@ -46,39 +45,57 @@ class FinalPlanner:
         th = threading.Thread(target=self.keyboard_listener, daemon=True)
         th.start()
         self.rate = rospy.Rate(self.rate_hz)
-        
-        
+
+        # Parameters (can be overridden via YAML / rosparam)
+        self.roi_min_x = rospy.get_param("~roi_min_x", ROI_MIN_X)
+        self.roi_max_x = rospy.get_param("~roi_max_x", ROI_MAX_X)
+        self.roi_min_y = rospy.get_param("~roi_min_y", ROI_MIN_Y)
+        self.roi_max_y = rospy.get_param("~roi_max_y", ROI_MAX_Y)
+        self.roi_offset_x = rospy.get_param("~roi_offset_x", 0.74)
+
+        self.SPEED_0 = rospy.get_param("~speed_0", SPEED_0)
+        self.SPEED_MID = rospy.get_param("~speed_mid", SPEED_MID)
+        self.SPEED_HIGH = rospy.get_param("~speed_high", SPEED_HIGH)
+
+        self.LC_STEER = rospy.get_param("~lc_steer", LC_STEER)
+        self.steer_time = rospy.get_param("~steer_time", STEER_TIME)
+        self.straight_time = rospy.get_param("~straight_time", STRAIGHT_TIME)
+
+        self.ultrasonic_threshold = rospy.get_param("~ultrasonic_threshold", 300)
+        self.queues_maxlen = rospy.get_param("~queues_maxlen", 10)
+        self.yolo_count_threshold = rospy.get_param("~yolo_count_threshold", 7)
+        self.ultrasonic_count_threshold = rospy.get_param("~ultrasonic_count_threshold", 7)
+
         self.mode = "DEFAULT"
         self.last_lane_steer = 0
         self.lane_steer_received = False
         self.state = "lane_driving"
-        self.ultrasonic_queue = deque(maxlen=10)
+
+        # Queues (bounded by configured maxlen)
+        self.ultrasonic_queue = deque(maxlen=self.queues_maxlen)
         self.ultrasonic_crash = False
-        self.ultrasonic_threshold = 300  # 예시 (mm)
-        
-        self.yolo_queue = deque(maxlen=10)
+
+        self.yolo_queue = deque(maxlen=self.queues_maxlen)
         self.yolo_crash = False
-        
+
         self.cur_lane = 2
-        
+
         self.start_time = None
         self.wait_for_traffic = False
-        
+
         self.traffic_light = 0
-        
+        self.traffic_queue = deque(maxlen=self.queues_maxlen)
+        self.traffic_red_threshold = rospy.get_param("~traffic_red_threshold", 5)
+
         self.run()
         
         
     def ultrasonic1_callback(self, msg):
-        
         self.ultrasonic_queue.append(msg.data)
 
-        
         if len(self.ultrasonic_queue) == self.ultrasonic_queue.maxlen:
-
             count_over = sum(1 for v in self.ultrasonic_queue if v <= self.ultrasonic_threshold)
-
-            self.ultrasonic_crash = count_over >= 7
+            self.ultrasonic_crash = count_over >= self.ultrasonic_count_threshold
             
     
     def car_projected_callback(self, msg: PointStamped):
@@ -86,13 +103,12 @@ class FinalPlanner:
         x = msg.point.x
         y = msg.point.y
 
-        self.yolo_queue.append(ROI_MIN_X + 0.74 <= x <= ROI_MAX_X + 0.74 and ROI_MIN_Y <= y <= ROI_MAX_Y)
-        
+        inside = (self.roi_min_x + self.roi_offset_x) <= x <= (self.roi_max_x + self.roi_offset_x) and self.roi_min_y <= y <= self.roi_max_y
+        self.yolo_queue.append(inside)
+
         if len(self.yolo_queue) == self.yolo_queue.maxlen:
-            
             count_over = sum(1 for v in self.yolo_queue if v)
-            
-            self.yolo_crash = count_over >= 7
+            self.yolo_crash = count_over >= self.yolo_count_threshold
         
     
     def cur_lane_callback(self, msg): self.cur_lane = msg.data
@@ -104,7 +120,12 @@ class FinalPlanner:
             self.lane_steer_received = True
     
     
-    def traffic_callback(self, msg): self.traffic_light = msg.data
+    def traffic_callback(self, msg):
+        val = int(msg.data)
+        with self.lock:
+            self.traffic_light = val
+            if val in (1, 3):
+                self.traffic_queue.append(val)
 
 
     def keyboard_listener(self):
@@ -138,10 +159,12 @@ class FinalPlanner:
                 if self.state == "lane_driving":
                     
                     if self.wait_for_traffic:
-                        self.state = "traffic"
+                        with self.lock:
+                            self.state = "traffic"
+                            self.traffic_queue.clear()
                         continue
                         
-                    self.drive(lane_steer, SPEED_HIGH)
+                    self.drive(lane_steer, self.SPEED_HIGH)
                     
                     if self.ultrasonic_crash or self.yolo_crash:
                         
@@ -162,25 +185,25 @@ class FinalPlanner:
 
                     # ===== STEP 0: 우로 꺾기 =====
                     if self.lc_step == 0:
-                        self.drive(-LC_STEER, SPEED_HIGH)
+                        self.drive(-self.LC_STEER, self.SPEED_HIGH)
 
-                        if elapsed >= STEER_TIME:
+                        if elapsed >= self.steer_time:
                             self.lc_step = 1
                             self.start_time = rospy.Time.now()
                             
                     # ===== STEP 1: 직진 =====
                     elif self.lc_step == 1:
-                        self.drive(0, SPEED_HIGH)
+                        self.drive(0, self.SPEED_HIGH)
 
-                        if elapsed >= STRAIGHT_TIME:
+                        if elapsed >= self.straight_time:
                             self.lc_step = 2
                             self.start_time = rospy.Time.now()
                             
                     # ===== STEP 2: 좌로 꺾기 =====
                     elif self.lc_step == 2:
-                        self.drive(LC_STEER, SPEED_HIGH)
+                        self.drive(self.LC_STEER, self.SPEED_HIGH)
 
-                        if elapsed >= STEER_TIME:
+                        if elapsed >= self.steer_time:
                             self.lc_step = 3
                             self.start_time = rospy.Time.now()
 
@@ -201,25 +224,25 @@ class FinalPlanner:
 
                     # ===== STEP 0: 좌로 꺾기 =====
                     if self.lc_step == 0:
-                        self.drive(LC_STEER, SPEED_HIGH)
+                        self.drive(self.LC_STEER, self.SPEED_HIGH)
 
-                        if elapsed >= STEER_TIME:
+                        if elapsed >= self.steer_time:
                             self.lc_step = 1
                             self.start_time = rospy.Time.now()
                             
                     # ===== STEP 1: 직진 =====
                     elif self.lc_step == 1:
-                        self.drive(0, SPEED_HIGH)
+                        self.drive(0, self.SPEED_HIGH)
 
-                        if elapsed >= STRAIGHT_TIME:
+                        if elapsed >= self.straight_time:
                             self.lc_step = 2
                             self.start_time = rospy.Time.now()
                             
                     # ===== STEP 2: 우로 꺾기 =====
                     elif self.lc_step == 2:
-                        self.drive(-LC_STEER, SPEED_HIGH)
+                        self.drive(-self.LC_STEER, self.SPEED_HIGH)
 
-                        if elapsed >= STEER_TIME:
+                        if elapsed >= self.steer_time:
                             self.lc_step = 3
                             self.start_time = rospy.Time.now()
 
@@ -230,11 +253,14 @@ class FinalPlanner:
                 
                 
                 if self.state == "traffic":
-                    
-                    if self.traffic_light != 1:     # red
-                        self.drive(lane_steer, SPEED_MID)
+                    # If recent traffic signals contain enough red(1) entries, stop.
+                    with self.lock:
+                        red_count = sum(1 for v in self.traffic_queue if v == 1)
+
+                    if red_count >= self.traffic_red_threshold:
+                        self.drive(lane_steer, self.SPEED_0)
                     else:
-                        self.drive(lane_steer, SPEED_0)
+                        self.drive(lane_steer, self.SPEED_MID)
 
             self.rate.sleep()
 

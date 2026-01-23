@@ -4,8 +4,6 @@
 import rospy
 import numpy as np
 import cv2
-from collections import deque
-
 from sensor_msgs.msg import Image
 from std_msgs.msg import Int16, Header
 from cv_bridge import CvBridge
@@ -97,10 +95,6 @@ class TrafficDetectionNode:
         self.ov_color_yellow = tuple(int(x) for x in rospy.get_param("~overlay/yellow_bgr", [0, 255, 255]))
         self.ov_color_green = tuple(int(x) for x in rospy.get_param("~overlay/green_bgr", [0, 255, 0]))
         self.ov_color_unknown = tuple(int(x) for x in rospy.get_param("~overlay/unknown_bgr", [200, 200, 200]))
-
-        # voting params
-        self.vote_len = int(rospy.get_param("~vote_len", 10))
-        self.state_queue = deque(maxlen=self.vote_len)
 
         if not self.weights:
             rospy.logerr("traffic_detection: ~weights is empty")
@@ -206,32 +200,11 @@ class TrafficDetectionNode:
                 state = hsv_color_vote(roi)
 
         # =========================
-        # voting (recent N states)
-        # =========================
-        self.state_queue.append(state)
-
-        voted_state = UNKNOWN
-
-        if len(self.state_queue) == self.state_queue.maxlen:
-            valid = [s for s in self.state_queue if s != UNKNOWN]
-            if len(valid) > 0:
-                counts = {
-                    RED: valid.count(RED),
-                    YELLOW: valid.count(YELLOW),
-                    GREEN: valid.count(GREEN),
-                }
-                voted_state = max(counts, key=counts.get)
-            else:
-                voted_state = UNKNOWN
-        else:
-            voted_state = state
-
-        # =========================
         # publish (only on change)
         # =========================
-        if voted_state != self.last_pub_state:
-            self.pub_state.publish(Int16(voted_state))
-            self.last_pub_state = voted_state
+        if state != self.last_pub_state:
+            self.pub_state.publish(Int16(state))
+            self.last_pub_state = state
 
         # overlay publish (구독자가 있을 때만)
         if self.ov_enable and self.pub_overlay is not None:

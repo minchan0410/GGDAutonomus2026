@@ -1,4 +1,9 @@
 <launch>
-  <node pkg="pre_final_planner" type="final_planner.py" name="final_planner" output="screen"/>
-  
+  <!-- Load YAML params and start final_planner node -->
+  <rosparam file="$(find pre_final_planner)/config/final_planner.yaml" command="load" />
+
+  <node pkg="pre_final_planner" type="final_planner.py" name="final_planner" output="screen">
+    <!-- node will read private params using ~param in the script -->
+  </node>
+
 </launch>

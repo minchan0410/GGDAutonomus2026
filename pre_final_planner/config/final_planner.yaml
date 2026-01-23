@@ -1,0 +1,30 @@
+# Configuration for final_planner node
+rate_hz: 20
+default_motor: 0
+
+# Region of interest for YOLO/projected car
+# 단위 미터
+roi_min_x: 0.0
+roi_max_x: 0.5
+roi_min_y: -0.4
+roi_max_y: 0.4
+roi_offset_x: 0.74
+
+# Speeds
+speed_0: 0
+speed_mid: 150
+speed_high: 255
+
+# Lane change / steering
+lc_steer: 22.5     # 좌우 조향 각도 (도)
+steer_time: 1.0    # 좌우 조향 시간 (초)
+straight_time: 1.0 # 좌우 조향 사이 직진하는 시간 (초)
+
+# Sensors / thresholds
+ultrasonic_threshold: 300 #단위 mm
+ultrasonic_count_threshold: 7
+yolo_count_threshold: 7
+queues_maxlen: 10
+
+# Traffic handling
+traffic_red_threshold: 5 #큐 length 중 5개 이상 빨간게 들어오면 정지
