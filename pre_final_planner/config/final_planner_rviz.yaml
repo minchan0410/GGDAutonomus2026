@@ -1,0 +1,38 @@
+# final_planner_rviz.yaml
+# RViz marker appearance only (shared planner params live in final_planner.yaml)
+
+final_planner_rviz:
+  publish_rate: 20.0
+  marker_topic: "/final_planner/markers"
+  base_frame: "base_link"
+  ultrasonic_frame: "ultrasonic_1_link"
+
+  hud:
+    enable: true
+    topic: "/final_planner/hud"
+    left: 10
+    top: 10
+    width: 450
+    height: 350
+    text_size: 18
+    line_width: 2
+    fg: [1.0, 1.0, 1.0, 1.0]
+    bg: [0.0, 0.0, 0.0, 0.55]
+
+  roi:
+    z: 0.05
+    thickness: 0.02
+    alpha: 0.25
+
+  ultrasonic:
+    bar_y: 0.03
+    bar_z: 0.03
+    z_offset: 0.0
+    alpha: 0.8
+
+  text3d:
+    enable: false
+
+  colors:
+    green: [0.0, 1.0, 0.0]
+    orange: [1.0, 0.5, 0.0]

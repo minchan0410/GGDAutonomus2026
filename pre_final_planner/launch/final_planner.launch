@@ -1,9 +1,27 @@
 <launch>
-  <!-- Load YAML params and start final_planner node -->
-  <rosparam file="$(find pre_final_planner)/config/final_planner.yaml" command="load" />
+  <!-- RViz on/off + config -->
+  <arg name="rviz" default="true"/>
+  <arg name="rviz_config" default="$(find pre_final_planner)/rviz/final_planner.rviz"/>
 
-  <node pkg="pre_final_planner" type="final_planner.py" name="final_planner" output="screen">
-    <!-- node will read private params using ~param in the script -->
+  <!-- Load YAML params -->
+  <rosparam file="$(find pre_final_planner)/config/final_planner.yaml" command="load" />
+  <rosparam file="$(find pre_final_planner)/config/final_planner_rviz.yaml" command="load" />
+
+  <!-- robot_description + TF (from my_car_description) -->
+  <param name="robot_description"
+         command="$(find xacro)/xacro '$(find my_car_description)/urdf/sls_amg.urdf.xacro'"/>
+  <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher" output="screen">
+    <param name="publish_frequency" value="50.0"/>
   </node>
 
+  <!-- final planner -->
+  <node pkg="pre_final_planner" type="final_planner.py" name="final_planner" output="screen" />
+
+  <!-- rviz markers publisher -->
+  <node pkg="pre_final_planner" type="final_planner_rviz.py" name="final_planner_rviz" output="screen" />
+
+  <!-- RViz -->
+  <node pkg="rviz" type="rviz" name="rviz"
+        args="-d $(find pre_final_planner)/rviz/final_planner.rviz" output="screen"/>
 </launch>
+
