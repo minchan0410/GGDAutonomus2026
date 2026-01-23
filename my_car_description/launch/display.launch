@@ -1,0 +1,17 @@
+<launch>
+  <!-- robot_description 로드 -->
+  <param name="robot_description"
+         command="$(find xacro)/xacro '$(find my_car_description)/urdf/sls_amg.urdf.xacro'"/>
+
+  <!-- 고정조인트 TF publish -->
+  <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher" output="screen">
+    <param name="publish_frequency" value="50.0"/>
+  </node>
+
+  <!-- base_link를 map에 일단 고정(나중에 odom/ekf 붙이면 이 줄 빼면 됨) -->
+  <node pkg="tf2_ros" type="static_transform_publisher" name="map_to_base"
+        args="0 0 0 0 0 0 map base_link"/>
+
+  <!-- RViz -->
+  <node pkg="rviz" type="rviz" name="rviz" output="screen"/>
+</launch>

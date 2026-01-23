@@ -70,6 +70,7 @@ class FinalPlanner:
         self.last_lane_steer = 0
         self.lane_steer_received = False
         self.state = "lane_driving"
+        self.last_state = None
 
         # Queues (bounded by configured maxlen)
         self.ultrasonic_queue = deque(maxlen=self.queues_maxlen)
@@ -150,6 +151,22 @@ class FinalPlanner:
             with self.lock:
                 mode = self.mode
                 lane_steer = self.last_lane_steer if self.lane_steer_received else 0
+                state_local = self.state
+
+            # Log state transitions (only once when state changes)
+            if state_local != self.last_state:
+                if state_local == "lane_driving":
+                    rospy.loginfo("[lane_driving]")
+                elif state_local == "lane_change_to_left":
+                    rospy.loginfo("[lane change to left]")
+                elif state_local == "lane_change_to_right":
+                    rospy.loginfo("[lane change to right]")
+                elif state_local == "traffic":
+                    rospy.loginfo("[traffic]")
+                else:
+                    rospy.loginfo("[state: %s]" % state_local)
+
+                self.last_state = state_local
 
             if mode == "DEFAULT":
                 self.drive(0, self.default_motor)

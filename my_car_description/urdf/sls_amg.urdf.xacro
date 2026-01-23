@@ -1,0 +1,82 @@
+<?xml version="1.0"?>
+<robot name="sls_amg" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- ===================== -->
+  <!-- Tunable params -->
+  <!-- OBJ가 mm 단위면 0.001, cm 단위면 0.01, m면 1.0 -->
+  <xacro:property name="mesh_scale" value="0.2371 0.2371 0.2371"/>
+
+  <!-- base_link 위치(보통 차 중심 바닥/중심 등 원하는 기준으로) -->
+  <xacro:property name="base_xyz" value="0.19 0 0.148"/>
+  <xacro:property name="base_rpy" value="0 0 1.57079632679"/>
+
+  <!-- 카메라(예시값) -->
+  <xacro:property name="cam_xyz" value="0.00 0.00 0.75"/>
+  <xacro:property name="cam_rpy" value="0 0 0"/>
+
+  <!-- 초음파 5개(예시값: 전좌/전중/전우/후좌/후우) -->
+  <xacro:property name="us0_xyz" value="0.54  0.275 0.25"/>  <!-- front_left -->
+  <xacro:property name="us1_xyz" value="0.74  0.0 0.15"/>  <!-- front_center -->
+  <xacro:property name="us2_xyz" value="0.54 -0.275 0.25"/>  <!-- front_right -->
+  <xacro:property name="us3_xyz" value="-0.16  0.275 0.25"/> <!-- rear_left -->
+  <xacro:property name="us4_xyz" value="-0.16 -0.275 0.25"/> <!-- rear_right -->
+
+
+  <xacro:property name="us0_rpy" value="0 0 1.57079632679"/>  <!-- front_left -->
+  <xacro:property name="us1_rpy" value="0 0 0"/>  <!-- front_center -->
+  <xacro:property name="us2_rpy" value="0 0 -1.57079632679"/>  <!-- front_right -->
+  <xacro:property name="us3_rpy" value="0 0 1.57079632679"/>  <!-- rear_left -->
+  <xacro:property name="us4_rpy" value="0 0 -1.57079632679"/>  <!-- rear_right -->
+
+  <!-- ===================== -->
+  <!-- base link -->
+  <link name="base_link">
+    <visual>
+      <origin xyz="${base_xyz}" rpy="${base_rpy}"/>
+      <geometry>
+        <mesh filename="package://my_car_description/meshes/sls_amg.obj" scale="${mesh_scale}"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <!-- ===================== -->
+  <!-- camera -->
+  <link name="camera_link"/>
+  <joint name="camera_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="camera_link"/>
+    <origin xyz="${cam_xyz}" rpy="${cam_rpy}"/>
+  </joint>
+
+  <!-- ===================== -->
+  <link name="ultrasonic_0_link"/>
+  <joint name="ultrasonic_0_joint" type="fixed">
+    <parent link="base_link"/><child link="ultrasonic_0_link"/>
+    <origin xyz="${us0_xyz}" rpy="${us0_rpy}"/>
+  </joint>
+
+  <link name="ultrasonic_1_link"/>
+  <joint name="ultrasonic_1_joint" type="fixed">
+    <parent link="base_link"/><child link="ultrasonic_1_link"/>
+    <origin xyz="${us1_xyz}" rpy="${us1_rpy}"/>
+  </joint>
+
+  <link name="ultrasonic_2_link"/>
+  <joint name="ultrasonic_2_joint" type="fixed">
+    <parent link="base_link"/><child link="ultrasonic_2_link"/>
+    <origin xyz="${us2_xyz}" rpy="${us2_rpy}"/>
+  </joint>
+
+  <link name="ultrasonic_3_link"/>
+  <joint name="ultrasonic_3_joint" type="fixed">
+    <parent link="base_link"/><child link="ultrasonic_3_link"/>
+    <origin xyz="${us3_xyz}" rpy="${us3_rpy}"/>
+  </joint>
+
+  <link name="ultrasonic_4_link"/>
+  <joint name="ultrasonic_4_joint" type="fixed">
+    <parent link="base_link"/><child link="ultrasonic_4_link"/>
+    <origin xyz="${us4_xyz}" rpy="${us4_rpy}"/>
+  </joint>
+
+</robot>
