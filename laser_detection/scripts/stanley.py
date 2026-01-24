@@ -92,6 +92,7 @@ class Stanley:
         MAX_STEER_RAD = math.radians(22.5)
         steer = max(min(steer, MAX_STEER_RAD), -MAX_STEER_RAD)
         self.steer_pub.publish(Int16(int(math.degrees(steer))))
+        print(f"pub: {int(math.degrees(steer))}")
 
 
         # for debug

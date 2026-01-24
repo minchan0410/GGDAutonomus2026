@@ -14,8 +14,8 @@ import threading
 L = 0.8 # 휠베이스
 K = 20
 TH_MAX               = 1
-FORWARD_SPEED        = 150
-BACKWARD_SPEED       = 100
+FORWARD_SPEED        = 50
+BACKWARD_SPEED       = -100
 PAUSE_TIME           = 0.5
 PARKING_PAUSE_TIME   = 2
 GOING_LEFT_TIME      = 1.5
@@ -29,10 +29,10 @@ class Parking:
     def __init__(self):
         rospy.init_node("parking")
 
-        rospy.Subscriber("/ultrasonic2", Int16, self.ultrasonic2_callback, queue_size=1)
-        rospy.Subscriber("/ultrasonic3", Int16, self.ultrasonic3_callback, queue_size=1)
-        rospy.Subscriber("/ultrasonic4", Int16, self.ultrasonic4_callback, queue_size=1)
-        rospy.Subscriber("/ultrasonic5", Int16, self.ultrasonic5_callback, queue_size=1)
+        # rospy.Subscriber("/ultrasonic2", Int16, self.ultrasonic2_callback, queue_size=1)
+        # rospy.Subscriber("/ultrasonic3", Int16, self.ultrasonic3_callback, queue_size=1)
+        # rospy.Subscriber("/ultrasonic4", Int16, self.ultrasonic4_callback, queue_size=1)
+        # rospy.Subscriber("/ultrasonic5", Int16, self.ultrasonic5_callback, queue_size=1)
         rospy.Subscriber("/detection_poses",PoseArray,self.detection_poses_callback,queue_size=1)
         rospy.Subscriber("/parking_lane_steer", Int16, self.lane_steer_callback, queue_size=1)
         rospy.Subscriber("/parking_stanley_steer", Int16, self.stanley_steer_callback, queue_size=1)
@@ -53,7 +53,9 @@ class Parking:
         self.finish_streak = 0
         self.parked_streak = 0
         self.pulled_streak = 0
+        self.stanley_steer = 0
         self.is_lane_detected = False
+        self.filtered_point = None
         self.lane_detect_queue = deque(maxlen=10)
         self.to_finish = False
         self.can_start_parking = False
@@ -61,21 +63,29 @@ class Parking:
         self.start_time = None
         self.mission_completed = False
         self.pulled_out = False
-        self.filtered_points = None     # (2,2) numpy array
+        self.filtered_point = np.empty((2, 2))     # (2,2) numpy array
         self.reject_count = 0       # 유사성 실패 누적
-        self.state = "default"
-        self.prev_state = "lane_driving"
-        key_thread = threading.Thread(target=self.keyboard_listener)
-        key_thread.daemon = True
-        key_thread.start()
+        self.mode = "DEFAULT"
+        self.state = None
+        self.prev_state = None
+        
+        self.lane_driving_enter_time = None
+        self.lane_driving_delay = rospy.Duration(5.0)  # 5초
+
+        
+        self.lock = threading.Lock()
+        th = threading.Thread(target=self.keyboard_listener, daemon=True)
+        th.start()
         
         self.stanley_debug = True   # TODO
+        # self.stanley_debug = False   # TODO
+        
         self.rate = rospy.Rate(20)
         
         if self.stanley_debug:
             rospy.logwarn_once("STANLEY DEBUG MODE ENABLED")
-            self.filtered_point = np.array([[-5, 1.0],[-4.5, 2.0]])
-            self.filtered_point = np.array([[-5, 1.0],[-4.5, 2.0]])
+            # self.filtered_point = np.array([[-5, 1.0],[-4.5, 2.0]])
+            # self.filtered_point = np.array([[-5, 1.0],[-4.5, 2.0]])
             
             self.state = "stanley"
             while not rospy.is_shutdown():
@@ -84,13 +94,73 @@ class Parking:
                 self.rate.sleep()
                 
         else:
-            while not rospy.is_shutdown():
-                rospy.loginfo_throttle(0.5, f"state: {self.state}")
+            self.run()
+    
+    def keyboard_listener(self):
+        """
+        d : DEFAULT (무조건 정지, state 저장)
+        f : FINAL (FSM 실행 / 이전 state 복귀)
+        """
 
-                if self.state == "default":
-                    self.drive(0,0)
-                    continue
+        while not rospy.is_shutdown():
+            key = input().strip().lower()
 
+            with self.lock:
+                # =====================
+                # DEFAULT 모드
+                # =====================
+                if key == "d":
+                    if self.mode != "DEFAULT":
+                        self.mode = "DEFAULT"
+
+                        # FSM 진행 중이었다면 state 저장
+                        if self.state is not None:
+                            self.prev_state = self.state
+                            rospy.loginfo(
+                                f"-> DEFAULT (saved state: {self.prev_state})"
+                            )
+                        else:
+                            rospy.loginfo("-> DEFAULT")
+
+                    else:
+                        rospy.loginfo("already in DEFAULT")
+
+                # =====================
+                # FINAL 모드
+                # =====================
+                elif key == "f":
+                    if self.mode != "FINAL":
+                        self.mode = "FINAL"
+
+                        # DEFAULT에서 복귀하는 경우
+                        if self.prev_state is not None:
+                            self.state = self.prev_state
+                            rospy.loginfo(
+                                f"-> FINAL (resume state: {self.state})"
+                            )
+                        else:
+                            # 최초 FINAL 진입
+                            self.state = "lane_driving"
+                            rospy.loginfo(
+                                "-> FINAL (start lane_driving)"
+                            )
+
+                    else:
+                        rospy.loginfo("already in FINAL")
+
+                else:
+                    rospy.logwarn("invalid key (use 'd' or 'f')")
+
+                    
+    def run(self):
+        
+        while not rospy.is_shutdown():
+            rospy.loginfo_throttle(0.5, f"state: {self.state}, filtered_point: {self.filtered_point}")
+
+            if self.mode == "DEFAULT":
+                self.drive(0,0)
+
+            elif self.mode == "FINAL":
                 if self.state == "lane_driving":             # 미션 시작해서 일직선으로 주행하는 단계
                     if not self.first_car_detected:
                         self.drive(self.lane_steer, FORWARD_SPEED)
@@ -98,7 +168,6 @@ class Parking:
                         self.state = "full_left_steer"
                         self.start_time = None
                         continue
-
 
                 if self.state == "full_left_steer":              # 주차 공간 발견 후 왼쪽으로 살짝 꺾어서 각 만드는 단계
                     if not self.can_start_parking:
@@ -124,8 +193,8 @@ class Parking:
                         self.state = "stop"
                         self.start_time = rospy.Time.now()
                         continue
-                    
-                    
+            
+            
                 if self.state == "stop":
                     elapsed = (rospy.Time.now() - self.start_time).to_sec()
                     self.drive(0, 0)
@@ -137,52 +206,31 @@ class Parking:
 
                 if self.state == "pull_out":
                     if not self.pulled_out:
-                        self.drive(self.stanley_steer, FORWARD_SPEED)
+                        self.drive(0.0, FORWARD_SPEED)
                         self.sonic_check()
                     else:
                         if self.start_time is None:
                             self.start_time = rospy.Time.now()
 
                         elapsed = (rospy.Time.now() - self.start_time).to_sec()
-                        if elapsed < GOING_RIGHT_TIME or not self.is_lane_detected:
+                        if elapsed < GOING_RIGHT_TIME:
                             self.drive(FULL_RIGHT_STEER, FORWARD_SPEED)
                         else:
                             self.start_time = None
                             self.state = "finishing"
                             continue
                         
-
                 if self.state == "finishing":
                     self.drive(self.lane_steer, FORWARD_SPEED)
 
 
-                self.rate.sleep()
-        
-    def keyboard_listener(self):
-        while not rospy.is_shutdown():
-            key = input().strip().lower()
-
-            # d: 무조건 정지 (DEFAULT)
-            if key == 'd':
-                if self.state != "default":
-                    self.prev_state = self.state   # 현재 미션 상태 저장
-                    self.state = "default"
-                    rospy.loginfo(f"parking_planner -> DEFAULT (saved {self.prev_state})")
-                else:
-                    rospy.loginfo("already in DEFAULT")
-
-            # p: 이전 미션 상태로 복귀
-            elif key == 'p':
-                if self.state == "default" and self.prev_state is not None:
-                    self.state = self.prev_state
-                    rospy.loginfo(f"parking_planner -> RESUME {self.state}")
-                else:
-                    rospy.loginfo("cannot resume (not in DEFAULT or no prev_state)")
+            self.rate.sleep()
                     
     
     def lane_steer_callback(self, msg): self.lane_steer = msg.data
 
     def lane_detected_callback(self, msg):
+        
         self.lane_detect_queue.append(msg.data)
         true_count = sum(self.lane_detect_queue)
 
@@ -195,50 +243,77 @@ class Parking:
     
     def stanley_steer_callback(self, msg): self.stanley_steer = msg.data
         
-    def ultrasonic2_callback(self, msg): self.ultrasonics[0] = msg.data
+    # def ultrasonic2_callback(self, msg): self.ultrasonics[0] = msg.data
     
-    def ultrasonic3_callback(self, msg): self.ultrasonics[1] = msg.data
+    # def ultrasonic3_callback(self, msg): self.ultrasonics[1] = msg.data
     
-    def ultrasonic4_callback(self, msg): self.ultrasonics[2] = msg.data
+    # def ultrasonic4_callback(self, msg): self.ultrasonics[2] = msg.data
     
-    def ultrasonic5_callback(self, msg): self.ultrasonics[3] = msg.data
-    
+    # def ultrasonic5_callback(self, msg): self.ultrasonics[3] = msg.data
+
     def detection_poses_callback(self, msg):
-        
         point = np.array([[pose.position.x, pose.position.y] for pose in msg.poses],dtype=float)
         
+        point_debug = np.asarray(point)
+
+        if point_debug.ndim == 1:
+            rospy.logwarn_throttle(
+                1.0, "[detection] single point received, skipping 2car check"
+            )
+            return
+
+        if point_debug.shape[0] < 2:
+            rospy.logwarn_throttle(
+                1.0, "[detection] insufficient points for 2car 판단"
+            )
+            return
+
         if self.state == "lane_driving":
+            now = rospy.Time.now()
             
+            if self.lane_driving_enter_time is None:
+                self.lane_driving_enter_time = now
+                
+            if now - self.lane_driving_enter_time < self.lane_driving_delay:
+                return
+
             if not self.first_car_detected:
                 if not self.is_first_car(point):
+                    print("not first car")
                     self.first_car_streak = 0
                     return
-
+                print("first car")
                 self.first_car_streak += 1
 
-                if self.first_car_streak >= 10:
+                if self.first_car_streak >= 5:
                     self.first_car_detected = True
                     rospy.loginfo_once("First car detected")
             
         else:
+            self.lane_driving_enter_time = None
+
             if not self.can_start_parking:
-                if not self.is_2car(point):
+                if not self.is_2car1(point): # TODO 꼭 2개가 아니어도 ROI 내 좌표들의 부호를 가지고 판단할 수 있어야 함
                     self.parking_lot_streak = 0
                     return
                 # 2개 보장
                 self.parking_lot_streak += 1
 
-                if self.parking_lot_streak >= 10 and self.is_stop_cond(point):
+                if self.parking_lot_streak >= 3 and self.is_stop_cond(point):
                     self.can_start_parking = True
 
                     self.filtered_point = point.copy()
                     rospy.loginfo_once("Parking lot detected")
 
-            else:
-                if not self.is_2car(point):
+            else: # TODO 점 3~ 4개 나와도 그거 활용하면서 2개 뽑는 로직도 있어야 함
+
+                if not self.is_2car2(point):
                     self.reject_count += 1
+                    print("not two car")
                     return
                 # 2개 보장
+                print("two car")
+
                 dist = self.pair_distance(self.filtered_point, point)
                 adaptive_thresh = min(TH_MAX, 0.5 + 0.2 * self.reject_count)
 
@@ -253,64 +328,117 @@ class Parking:
                         self.reject_count = 0
                         print("Forced parking point update")
                 
-                # self.stanley_path(self.filtered_point) # debug
-
+                self.stanley_path(self.filtered_point) # debug ＃ TODO
+                
 
     def is_first_car(self, point):
+        
+        mask = (
+            (point[:, 0] >= -1) & (point[:, 0] <= 1) &
+            (point[:, 1] >=  -3) & (point[:, 1] <= -1)
+        )
+
+        point = point[mask]
         
         if point.shape[0] != 1:
             return False
         
-        if math.sqrt(point[0, 0]**2 + point[0, 1]**2) > 5.0:
-            return False
-        
-        if not (-1 <= point[0, 0] <= 1) or not ( 1 <= point[0, 1] <= 3):
-            return False
 
         return True
 
-
-    def is_2car(self, point):
+    def is_2car1(self, point):
         """
         두 클러스터가 '주차된 두 차량'이라고 볼 수 있는지 판정:
         1) 점이 정확히 2개
         2) 두 점 사이 거리 > 0.8m
-        3) 각 점이 원점(차량/센서 기준 local 좌표)에서 5m 이내
         """
+        r_min = 1.0   # 안쪽 원 반지름
+        r_max = 5.0   # 바깥 원 반지름
+
+        r = np.linalg.norm(point, axis=1)
+
+        # 두 원 사이에 있는 점만 선택
+        mask = (r >= r_min) & (r <= r_max)
+        point = point[mask]
+        # TODO ROI 각도 설정 까지 추가
+        
         if point.shape[0] != 2:
             return False
         
         dx = point[1, 0] - point[0, 0]
         dy = point[1, 1] - point[0, 1]
-        if not 0.8 <= math.sqrt(dx**2 + dy**2) <= 1.5:
+        if not 1.5 <= math.sqrt(dx**2 + dy**2) <= 3:
             return False
         
-        r0 = math.sqrt(point[0, 0]**2 + point[0, 1]**2)
-        r1 = math.sqrt(point[1, 0]**2 + point[1, 1]**2)
-        if (r0 > 5.0) or (r1 > 5.0):
-            return False
-
         return True
     
+    def is_2car2(self, point):
+        point = np.asarray(point)
+
+        # 최소 2개 필요
+        if point.ndim != 2 or point.shape[0] < 2:
+            print("1")
+            return False
+
+        # -------------------------------
+        # 🔥 가장 가까운 2개 포인트 선택
+        # -------------------------------
+        N = point.shape[0]
+        min_dist2 = float("inf")
+        best_pair = None
+
+        for i in range(N):
+            for j in range(i + 1, N):
+                dx = point[i, 0] - point[j, 0]
+                dy = point[i, 1] - point[j, 1]
+                d2 = dx*dx + dy*dy
+
+                if d2 < min_dist2:
+                    min_dist2 = d2
+                    best_pair = (i, j)
+
+        # 두 개로 point 재정의
+        point = point[list(best_pair), :]   # shape (2,2)
+
+        # -------------------------------
+        # 기존 로직
+        # -------------------------------
+
+        # 각 포인트 5m 이내
+        # if (point[:, 0]**2 + point[:, 1]**2 > 5.0**2).any():
+        #     print("2")
+        #     return False
+
+        # # 두 점 사이 거리
+        # dx = point[1, 0] - point[0, 0]
+        # dy = point[1, 1] - point[0, 1]
+        # dist2 = dx*dx + dy*dy
+
+        # if not (0.8**2 <= dist2 <= 1.5**2):
+        #     print("3")
+        #     return False
+
+        return True
+
     
     def is_stop_cond(self, point):
         
         return point[0, 1] * point[1, 1] < 0
 
-        
     def pair_distance(self, A, B):
         d1 = np.linalg.norm(A[0] - B[0]) + np.linalg.norm(A[1] - B[1])
         d2 = np.linalg.norm(A[0] - B[1]) + np.linalg.norm(A[1] - B[0])
         return min(d1, d2)
 
-    
     def drive(self, des_steer, long_cmd):
-        self.motor_cmd_steer_pub.publish(Int16(des_steer))
-        self.motor_long_pub.publish(Int16(long_cmd))
+        # return
+        self.motor_cmd_steer_pub.publish(Int16(int(des_steer)))
+        self.motor_long_pub.publish(Int16(int(long_cmd)))
     
-
     def stanley_path(self, filtered_point):
-
+        if filtered_point is None or len(filtered_point) < 2:
+            rospy.logwarn_throttle(1.0, "[stanley_path] need at least 2 points")
+            return None
         dest = np.mean(filtered_point, axis=0)
         v = filtered_point[1] - filtered_point[0]
 
@@ -353,19 +481,20 @@ class Parking:
         self.publish_filtered_points_marker(filtered_point)
         self.publish_filtered_points_line(filtered_point)
         
-
     def sonic_check(self):
         
         if self.state == "stanley":
+            
             if all(x < ULTRASONIC_THRESHOLD for x in self.ultrasonics):
                 self.parked_streak += 1
-                if self.parked_streak >= 10:
+                if self.parked_streak >= 5:
                     self.parked = True
             else:
                 self.parked_streak = 0
                 
         elif self.state == "pull_out":
-            sonics_to_use = [self.ultrasonics[0], self.ultrasonics[2]]
+            
+            sonics_to_use = [self.ultrasonics[0], self.ultrasonics[2]]  # TODO
             if all(x > ULTRASONIC_THRESHOLD + 1000 for x in sonics_to_use):
                 self.pulled_streak += 1
                 if self.pulled_streak >= 10:

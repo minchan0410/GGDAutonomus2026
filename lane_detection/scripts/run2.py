@@ -166,7 +166,7 @@ class LaneDetector:
         cv2.line(mask_bgr, (cx, 0), (cx, h), (255, 255, 255), 1)
 
         # 4. Filter & Score
-        filtering_slope = 0.3 
+        filtering_slope = 0.4 
         right_lines, left_lines = [], []
 
         if lines is not None:
@@ -216,7 +216,7 @@ class LaneDetector:
         else:
             filtered_midpoint = final_midpoint 
         
-        pubdata = int(-(filtered_midpoint - image_center_x) * 0.15 )
+        pubdata = int(-(filtered_midpoint - image_center_x) * 0.2 )
         msg_steer = Int16()
         msg_steer.data = pubdata
         self.pub_steer.publish(msg_steer)

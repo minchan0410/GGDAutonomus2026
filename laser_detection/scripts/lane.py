@@ -14,7 +14,7 @@ class ParkingLane:
     def __init__(self):
         rospy.init_node("parking_lane")
         
-        rospy.Subscriber("/usb_cam/image_raw", Image, self.usbcam_callback, queue_size=1)
+        rospy.Subscriber("/cam1/usb_cam/image_raw", Image, self.usbcam_callback, queue_size=1)
         self.lane_steer_pub = rospy.Publisher("/parking_lane_steer", Int16, queue_size=1)
         self.lane_detected_pub = rospy.Publisher("/is_lane_detected", Bool, queue_size=1)
         self.bridge = CvBridge()
@@ -22,10 +22,13 @@ class ParkingLane:
         
         self.rate = rospy.Rate(20)
         while not rospy.is_shutdown():
+            # print("sd")
             self.lane_detection()
             self.rate.sleep()
         
-    def usbcam_callback(self, msg): self.image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+    def usbcam_callback(self, msg):
+        print("111")
+        self.image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
 
     def split_contiguous(self, indices):
         groups = []
@@ -43,9 +46,11 @@ class ParkingLane:
     
     def lane_detection(self):
         if not hasattr(self, "image"):
+            # print("qqq")
             return
         cv_img = self.image
         y, x, _ = cv_img.shape  # 480, 640
+        print(f"y: {y}, x: {x}")
         hsv_img = cv2.cvtColor(cv_img, cv2.COLOR_BGR2HSV)
 
         white_lower = np.array([0, 0, 130])
@@ -55,12 +60,12 @@ class ParkingLane:
         and_img = cv2.bitwise_and(cv_img, cv_img, mask=white_filter)
         margin_x1 = 0
         margin_x2 = 240 # TODO
-        margin_y = 260
+        margin_y = 100
 
-        src_pt1 = (margin_x1, y)
+        src_pt1 = (margin_x1, y-100)
         src_pt2 = (margin_x2, margin_y)
         src_pt3 = (x - margin_x2, margin_y)
-        src_pt4 = (x - margin_x1, y)
+        src_pt4 = (x - margin_x1, y-100)
         src_pts = np.float32([src_pt1, src_pt2, src_pt3, src_pt4])
 
         dst_margin_x = 120
@@ -91,7 +96,7 @@ class ParkingLane:
             upper_y = y - window_y_size * (i + 1)   # 420, 360, 300, ...
             lower_y = y - window_y_size * i         # 480, 420, 360, ...
 
-            window = bin_img[upper_y:lower_y, :center_index + 4/x]
+            window = bin_img[upper_y:lower_y, :center_index + int(4/x)]
             histogram = np.sum(window, axis=0)
             histogram[histogram < HIST_THRESHOLD] = 0
 
@@ -147,8 +152,8 @@ class ParkingLane:
         )
         
         self.lkas_steer = max(min(error_index * P, 22.5), -22.5)
-        self.lane_steer_pub.publish(int(self.lkas_steer))
-        
+        # self.lane_steer_pub.publish(int(self.lkas_steer))
+        self.lane_steer_pub.publish(int(0))
         rospy.loginfo_throttle(0.3, f"lane found: {len(indices) != 0}, steering: {self.lkas_steer:.2f}\n")
 
         warp_inv_img = cv2.warpPerspective(warp_img, matrix_inv, (x, y))

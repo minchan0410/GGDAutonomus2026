@@ -6,6 +6,7 @@ Panels:
       Expanded:
         - /Global Options1
         - /Status1
+        - /TF1
         - /TF1/Frames1
         - /lane_driving/target_point1/Namespaces1
       Splitter Ratio: 0.7382352948188782
@@ -209,7 +210,7 @@ Visualization Manager:
       Marker Topic: /car_projected_markers
       Name: car_projected
       Namespaces:
-        {}
+        car_projected: true
       Queue Size: 100
       Value: true
     - Class: rviz/MarkerArray
@@ -248,7 +249,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 5.437234878540039
+      Distance: 2.7960774898529053
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -264,9 +265,9 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.1647968292236328
+      Pitch: 0.49979668855667114
       Target Frame: <Fixed Frame>
-      Yaw: 3.150397777557373
+      Yaw: 3.2103981971740723
     Saved: ~
 Window Geometry:
   Displays:
