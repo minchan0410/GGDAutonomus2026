@@ -4,7 +4,8 @@ import cv2
 import numpy as np
 import math
 from sensor_msgs.msg import Image
-from std_msgs.msg import Int16 
+from std_msgs.msg import Int16, Int32MultiArray # [추가] Int32MultiArray
+from geometry_msgs.msg import PointStamped      # [추가] PointStamped
 from cv_bridge import CvBridge, CvBridgeError
 from sklearn.cluster import DBSCAN
 from collections import deque
@@ -48,8 +49,15 @@ class LaneDetector:
     def __init__(self):
         rospy.init_node('canny_lane_detector', anonymous=True)
         
+        # 기존 조향각 Publisher
         output_topic_name = rospy.get_param("~output_topic", "des_steer")
         self.pub_steer = rospy.Publisher(output_topic_name, Int16, queue_size=10)
+
+        # [추가됨] A. 차선 선분 (Pixel 좌표) Publisher
+        self.pub_lines_px = rospy.Publisher("/lane_lines_px", Int32MultiArray, queue_size=10)
+        
+        # [추가됨] B. 목표점 (Pixel 좌표) Publisher
+        self.pub_target_px = rospy.Publisher("/lane_target_px", PointStamped, queue_size=10)
         
         self.bridge = CvBridge()
         self.image_sub = rospy.Subscriber(IMAGE_TOPIC, Image, self.image_callback)
@@ -58,7 +66,8 @@ class LaneDetector:
         self.steer_history = deque(maxlen=self.window_size)
         
         print(f"Waiting for image topic: {IMAGE_TOPIC}...")
-        print(f"Publishing steering to: {output_topic_name} (Method: Moving Average)")
+        print(f"Publishing steering to: {output_topic_name}")
+        print("Publishing extra info to: /lane_lines_px, /lane_target_px")
 
     def filter_by_dbscan(self, lines, img_height):
         if not lines or len(lines) < 2: return lines
@@ -153,13 +162,7 @@ class LaneDetector:
         lines = cv2.HoughLinesP(mask_roi_applied, rho=1, theta=np.pi/180, threshold=50, minLineLength=50, maxLineGap=50)
         mask_bgr = cv2.cvtColor(mask_roi_applied, cv2.COLOR_GRAY2BGR)
         
-        # [기존 ROI 그리기]
         cv2.polylines(mask_bgr, roi_verts, isClosed=True, color=(0, 255, 0), thickness=2)
-
-        # ========================================================
-        # [추가됨] 화면 중앙 세로선 (단순 시각화용)
-        # 흰색 선(255, 255, 255)으로 중앙 상단(0)부터 하단(h)까지 그림
-        # ========================================================
         cv2.line(mask_bgr, (cx, 0), (cx, h), (255, 255, 255), 1)
 
         # 4. Filter & Score
@@ -219,6 +222,45 @@ class LaneDetector:
         self.pub_steer.publish(msg_steer)
         print(pubdata)
 
+        # ========================================================
+        # [추가됨] A. 차선 선분 Publish (/lane_lines_px)
+        # 포맷: [lx1, ly1, lx2, ly2, rx1, ry1, rx2, ry2]
+        # ========================================================
+        lane_data = [-1, -1, -1, -1, -1, -1, -1, -1] # 기본값 -1
+
+        if left_result is not None:
+            lane_data[0] = int(left_result[0])
+            lane_data[1] = int(left_result[1])
+            lane_data[2] = int(left_result[2])
+            lane_data[3] = int(left_result[3])
+
+        if right_result is not None:
+            lane_data[4] = int(right_result[0])
+            lane_data[5] = int(right_result[1])
+            lane_data[6] = int(right_result[2])
+            lane_data[7] = int(right_result[3])
+        
+        lines_msg = Int32MultiArray()
+        lines_msg.data = lane_data
+        self.pub_lines_px.publish(lines_msg)
+
+        # ========================================================
+        # [추가됨] B. 목표점 Publish (/lane_target_px)
+        # 타입: geometry_msgs/PointStamped
+        # ========================================================
+        target_msg = PointStamped()
+        target_msg.header.stamp = rospy.Time.now()
+        target_msg.header.frame_id = "camera_frame" # 프레임 ID는 적절히 설정 (여기선 임의값)
+        
+        # x는 필터링된 목표 중앙점, y는 관심 영역의 중간 높이(y_mid)
+        target_msg.point.x = filtered_midpoint 
+        target_msg.point.y = y_mid
+        target_msg.point.z = 0.0
+        
+        self.pub_target_px.publish(target_msg)
+        # ========================================================
+
+        # Visualization
         cv2.circle(mask_bgr, (filtered_midpoint, y_mid), 20, (255, 255, 0), -1)
         cv2.putText(mask_bgr, f"Offset: {msg_steer.data}", (filtered_midpoint - 80, y_mid - 40), 
                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)

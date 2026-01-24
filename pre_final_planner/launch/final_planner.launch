@@ -19,7 +19,11 @@
 
   <!-- rviz markers publisher -->
   <node pkg="pre_final_planner" type="final_planner_rviz.py" name="final_planner_rviz" output="screen" />
-
+  
+  <node pkg="pre_final_planner" type="lane_bev_rviz.py" name="lane_bev_rviz" output="screen">
+    <rosparam file="$(find pre_final_planner)/config/lane_bev_rviz.yaml" command="load"/>
+  </node>
+  
   <!-- RViz -->
   <node pkg="rviz" type="rviz" name="rviz"
         args="-d $(find pre_final_planner)/rviz/final_planner.rviz" output="screen"/>
