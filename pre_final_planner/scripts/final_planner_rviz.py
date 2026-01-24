@@ -246,7 +246,7 @@ class FinalPlannerRviz:
 
         us_raw_str = ""
         if self.ultrasonic_raw is not None:
-            us_raw_str = f"\nultrasonic1: {self.ultrasonic_raw}"
+            us_raw_str = f" | ultrasonic1: {self.ultrasonic_raw}"
 
         m.text = (
             f"state: {self.state}"
@@ -280,9 +280,9 @@ class FinalPlannerRviz:
             us_raw_str = f"\nultrasonic1: {self.ultrasonic_raw}"
 
         hud.text = (
-            f"state: {self.state}\n"
-            f"LC_reason: {reason}\n"
-            f"yolo_crash: {bool(y_show)}\n"
+            f"state: {self.state} | "
+            f"LC_reason: {reason} | "
+            f"yolo_crash: {bool(y_show)} | "
             f"sonic_crash: {bool(s_show)}"
             f"{us_raw_str}"
         )

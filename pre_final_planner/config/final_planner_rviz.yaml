@@ -11,10 +11,10 @@ final_planner_rviz:
     enable: true
     topic: "/final_planner/hud"
     left: 10
-    top: 10
-    width: 450
-    height: 150
-    text_size: 18
+    top: 950
+    width: 900
+    height: 28
+    text_size: 16
     line_width: 2
     fg: [1.0, 1.0, 1.0, 1.0]
     bg: [0.0, 0.0, 0.0, 0.55]
