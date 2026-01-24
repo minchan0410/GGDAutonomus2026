@@ -2,12 +2,18 @@
 # RViz marker appearance only (shared planner params live in final_planner.yaml)
 
 final_planner_rviz:
+  # RViz 마커/오버레이 시각화 전용 파라미터 모음
   publish_rate: 20.0
   marker_topic: "/final_planner/markers"
   base_frame: "base_link"
   ultrasonic_frame: "ultrasonic_1_link"
 
   hud:
+    # HUD 오버레이 박스 위치/크기 (화면 픽셀 기준)
+    # left/top은 RViz 화면 좌상단을 (0,0)으로 한 기준 좌표
+    # width/height는 박스의 가로/세로 크기
+    # text_size/line_width는 글자 크기와 테두리(선) 두께
+    # fg/bg는 RGBA 색상 (0~1 범위, bg 알파로 배경 투명도 조절)
     enable: true
     topic: "/final_planner/hud"
     left: 10
@@ -20,19 +26,23 @@ final_planner_rviz:
     bg: [0.0, 0.0, 0.0, 0.55]
 
   roi:
+    # ROI 마커의 높이/두께/투명도 설정 (RViz 표시용)
     z: 0.05
     thickness: 0.02
     alpha: 0.25
 
   ultrasonic:
+    # 초음파 바 마커의 위치/두께/투명도 설정 (RViz 표시용)
     bar_y: 0.03
     bar_z: 0.03
     z_offset: 0.0
     alpha: 0.8
 
   text3d:
+    # 3D 텍스트 마커 사용 여부
     enable: false
 
   colors:
+    # 표시 상태에 따른 컬러 팔레트 (RGB 0~1)
     green: [0.0, 1.0, 0.0]
     orange: [1.0, 0.5, 0.0]
