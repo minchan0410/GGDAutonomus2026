@@ -111,11 +111,15 @@ class FinalPlanner:
             self.ultrasonic_crash = count_over >= self.ultrasonic_count_threshold
 
     def car_projected_callback(self, msg: PointStamped):
+        # ✅ FIX: init 중 콜백이 먼저 들어오면 yolo_queue가 아직 없을 수 있음
+        if not hasattr(self, "yolo_queue"):
+            return
+
         x = msg.point.x
         y = msg.point.y
 
         inside = ((self.roi_min_x + self.roi_offset_x) <= x <= (self.roi_max_x + self.roi_offset_x)) and \
-                 (self.roi_min_y <= y <= self.roi_max_y)
+                (self.roi_min_y <= y <= self.roi_max_y)
 
         self.yolo_queue.append(inside)
 

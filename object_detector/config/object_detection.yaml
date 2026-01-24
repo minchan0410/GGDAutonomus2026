@@ -1,5 +1,5 @@
 image_topic: /cam1/usb_cam/image_raw
-model_path: "/home/vic/kkdws/src/object_detector/model/yolo26m.pt"
+model_path: "/home/vic/kkdws/src/object_detector/model/yolo26x.pt"
 conf_thres: 0.1
 device: "0"
 

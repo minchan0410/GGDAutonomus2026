@@ -21,9 +21,9 @@ cy: 359.8989
 # base_link 기준 카메라 위치/자세 (m/deg)
 cam_x_m: 0.0
 cam_y_m: 0.0
-cam_height_m: 1.20
+cam_height_m: 0.75
 cam_roll_deg: 0.0
-cam_pitch_deg: 10.0
+cam_pitch_deg: -10.0
 cam_yaw_deg: 0.0
 
 # occupancy grid

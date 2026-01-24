@@ -4,7 +4,7 @@ state_topic: "/traffic"
 
 # ---- yolo weights ----
 # 여기만 너가 찾은 .pt 절대경로로 바꿔서 넣어
-weights: "/home/vic/kkdws/src/object_detector/model/best_traffic_med_yolo.pt"
+weights: "/home/vic/kkdws/src/object_detector/model/best.onnx"
 
 # ---- inference params ----
 conf_th: 0.25

@@ -16,8 +16,8 @@ final_planner_rviz:
     # fg/bg는 RGBA 색상 (0~1 범위, bg 알파로 배경 투명도 조절)
     enable: true
     topic: "/final_planner/hud"
-    left: 10
-    top: 950
+    left: 300
+    top: 450
     width: 900
     height: 28
     text_size: 16
