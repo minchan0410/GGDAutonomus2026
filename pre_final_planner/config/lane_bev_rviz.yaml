@@ -23,13 +23,13 @@ cam_x_m: 0.0
 cam_y_m: 0.0
 cam_height_m: 0.75
 cam_roll_deg: 0.0
-cam_pitch_deg: -10.0
+cam_pitch_deg: 10.0
 cam_yaw_deg: 0.0
 
 # occupancy grid
 # BEV 그리드 해상도/크기 및 원점 (meters)
 resolution: 0.05
-grid_w: 400
+grid_w: 100
 grid_h: 400
 origin_x: 0.0
 origin_y: -10.0

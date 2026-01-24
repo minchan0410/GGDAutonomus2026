@@ -11,7 +11,7 @@ camera:
   cx: 638.6842
   cy: 359.8989
   height: 0.75
-  pitch_deg: -40.0   # 아래로 15도면 -15, 위로 15도면 +15
+  pitch_deg: -10.0   # 아래로 15도면 -15, 위로 15도면 +15
 
 
 marker:
@@ -19,7 +19,7 @@ marker:
   ns: car_projected
   id: 0
   type: sphere
-  scale: 0.3
+  scale: 0.2
   lifetime: 0.2
-  color_rgba: [1.0, 0.2, 0.2, 1.0]
+  color_rgba: [0.0, 0.2, 1.0, 1.0]
   z: 0.0

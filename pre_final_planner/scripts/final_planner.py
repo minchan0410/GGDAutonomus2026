@@ -104,11 +104,14 @@ class FinalPlanner:
 
     # ---------------- callbacks ----------------
     def ultrasonic1_callback(self, msg: Int16):
-        self.ultrasonic_queue.append(msg.data)
+        if msg.data == -1:
+            self.ultrasonic_queue.append(float('inf'))
+        else:
+            self.ultrasonic_queue.append(msg.data)
 
-        if len(self.ultrasonic_queue) == self.ultrasonic_queue.maxlen:
-            count_over = sum(1 for v in self.ultrasonic_queue if v <= self.ultrasonic_threshold)
-            self.ultrasonic_crash = count_over >= self.ultrasonic_count_threshold
+            if len(self.ultrasonic_queue) == self.ultrasonic_queue.maxlen:
+                count_over = sum(1 for v in self.ultrasonic_queue if v <= self.ultrasonic_threshold)
+                self.ultrasonic_crash = count_over >= self.ultrasonic_count_threshold
 
     def car_projected_callback(self, msg: PointStamped):
         # ✅ FIX: init 중 콜백이 먼저 들어오면 yolo_queue가 아직 없을 수 있음
