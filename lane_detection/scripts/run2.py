@@ -3,6 +3,7 @@ import rospy
 import cv2
 import numpy as np
 import math
+import time
 from sensor_msgs.msg import Image
 from std_msgs.msg import Int16, Int32MultiArray # [추가] Int32MultiArray
 from geometry_msgs.msg import PointStamped      # [추가] PointStamped
@@ -118,6 +119,9 @@ class LaneDetector:
         return filtered_lines
 
     def image_callback(self, msg):
+
+        start_time = time.time()
+
         try:
             frame = self.bridge.imgmsg_to_cv2(msg, "bgr8")
         except CvBridgeError as e:
@@ -220,7 +224,6 @@ class LaneDetector:
         msg_steer = Int16()
         msg_steer.data = pubdata
         self.pub_steer.publish(msg_steer)
-        print(pubdata)
 
         # ========================================================
         # [추가됨] A. 차선 선분 Publish (/lane_lines_px)
@@ -281,6 +284,10 @@ class LaneDetector:
         
         cv2.imshow('Lane Detector', combined_small)
         cv2.waitKey(1)
+
+        end_time = time.time()
+        elapsed_time = int((end_time - start_time) * 1000) 
+        print(f"/des_steer : {pubdata}, loop time : {elapsed_time}")
 
     def clean_up(self):
         cv2.destroyAllWindows()
