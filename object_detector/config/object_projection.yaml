@@ -5,13 +5,24 @@ pub_markers_topic: /car_projected_markers
 frame_id: base_link
 select_nearest: true
 
+#해상도 1280*720 일때 내적 파라미터
+# camera:
+#   fx: 832.4660
+#   fy: 844.8521
+#   cx: 688.4296
+#   cy: 316.8229
+#   height: 0.75
+#   pitch_deg: -14.5   # 아래로 15도면 -15, 위로 15도면 +15
+
+#해상도 640*480 일때 내적 파라미터
 camera:
-  fx: 928.4324
-  fy: 928.4279
-  cx: 638.6842
-  cy: 359.8989
+  fx: 505.0742
+  fy: 531.2114
+  cx: 352.6202
+  cy: 135.9729
   height: 0.75
-  pitch_deg: -14.5   # 아래로 15도면 -15, 위로 15도면 +15
+  pitch_deg: -14.5
+
 
 
 marker:
