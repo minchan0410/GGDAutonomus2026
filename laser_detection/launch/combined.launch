@@ -18,12 +18,12 @@
     </node>
     <node name="occ_grid" pkg="laser_detection" type="occ_grid" output="screen" />
       
-    <!-- Stanley Controller 
+    <!-- Stanley Controller-->
     <node name="stanley" pkg="laser_detection" type="stanley.py" output="screen" />
-    -->
-    <!-- Lane Controller
-    <node name="lane" pkg="laser_detection" type="lane.py" output="screen" />
-    -->
+    
+    <!-- Lane Controller-->
+    <node name="run" pkg="lane_detection" type="run.py" output="screen" />
+    
     
     <!-- Parking Planner-->
     <node name="parking" pkg="laser_detection" type="parking.py" output="screen" />
