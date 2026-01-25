@@ -13,7 +13,7 @@ import threading
 L = 0.8 # 휠베이스
 K = 20
 TH_MAX               = 1
-CAN_PARK_TH          = -2
+CAN_PARK_TH          = -2.5
 FORWARD_SPEED        = 50
 BACKWARD_SPEED       = -100
 PAUSE_TIME           = 0.5
@@ -131,6 +131,7 @@ class Parking:
                 while not rospy.is_shutdown():
                     if not self.first_car_detected:
                         self.drive(self.lane_steer, FORWARD_SPEED)
+                        
                     else:
                         self.state = "full_left_steer"
                         continue
@@ -237,6 +238,7 @@ class Parking:
                 if self.state == "lane_driving":             # 미션 시작해서 일직선으로 주행하는 단계
                     if not self.first_car_detected:
                         self.drive(self.lane_steer, FORWARD_SPEED)
+                        print(f"&*$@^(*@^*&#)(@*&*)(#&@()$&()@&^$*@^)*&$#&@*()#&*)(@&$*()@&*($)&$) lane steer: {self.lane_steer}")
                     else:
                         self.state = "full_left_steer"
                         continue
