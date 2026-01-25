@@ -6,7 +6,6 @@ Panels:
       Expanded:
         - /Global Options1
         - /Status1
-        - /TF1
         - /TF1/Frames1
         - /lane_driving/target_point1/Namespaces1
       Splitter Ratio: 0.7382352948188782
@@ -249,7 +248,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 2.7960774898529053
+      Distance: 6.999481201171875
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -265,9 +264,9 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.49979668855667114
+      Pitch: 1.5697963237762451
       Target Frame: <Fixed Frame>
-      Yaw: 3.2103981971740723
+      Yaw: 3.1553964614868164
     Saved: ~
 Window Geometry:
   Displays:

@@ -10,12 +10,21 @@ marker_topic: /lane_bev/markers
 # 좌표 기준 프레임
 frame_id: base_link
 
-# camera intrinsics
-# 카메라 내부 파라미터: fx, fy(초점거리), cx, cy(주점), 단위는 픽셀
-fx: 928.4324
-fy: 928.4279
-cx: 638.6842
-cy: 359.8989
+
+#해상도 1280*720 일때 내적 파라미터
+
+# fx: 832.4660
+# fy: 844.8521
+# cx: 688.4296
+# cy: 316.8229
+
+
+#해상도 640*480 일때 내적 파라미터
+fx: 505.0742
+fy: 531.2114
+cx: 352.6202
+cy: 135.9729
+
 
 # camera extrinsics
 # base_link 기준 카메라 위치/자세 (m/deg)

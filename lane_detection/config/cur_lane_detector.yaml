@@ -1,0 +1,50 @@
+cur_lane_detector:
+  image_topic: "/cam1/usb_cam/image_raw"
+  cur_lane_topic: "/cur_lane"
+
+  roi:
+    bottom_ratio: 0.30
+    split_ratio: 0.50
+
+  vote:
+    window: 10
+    tie_policy: "keep_last"   # keep_last | prefer_1 | prefer_2
+
+  init:
+    last_lane: 1
+
+  decision:
+    min_valid_pixels: 2000
+    use_ratio: true
+    exclusive_class: true
+
+  hsv:
+    gray:
+      lo: [0, 0, 50]
+      hi: [179, 60, 200]
+    green:
+      lo: [35, 40, 40]
+      hi: [95, 255, 255]
+    white:
+      lo: [0, 0, 200]
+      hi: [179, 50, 255]
+
+  filter:
+    blur:
+      enable: true
+      ksize: 5
+    morph:
+      enable: true
+      ksize: 3
+      iter: 1
+
+  cuda:
+    required: true
+    device: 0
+
+  debug:
+    enable: true
+    overlay_topic: "/cur_lane/debug_overlay"
+    class_topic: "/cur_lane/debug_class"
+    hud_scale: 0.9
+    hud_thick: 2

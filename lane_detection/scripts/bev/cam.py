@@ -15,7 +15,7 @@ class GridCaptureNode:
         rospy.init_node('grid_capture_node', anonymous=False)
         
         # 2. 설정 파라미터 (필요한 경우 토픽 이름을 변경하세요)
-        self.camera_topic = "/usb_cam/image_raw"
+        self.camera_topic = "/cam1/usb_cam/image_raw"
         
         # 3. 변수 초기화
         self.bridge = CvBridge()
