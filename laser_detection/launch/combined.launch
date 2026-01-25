@@ -2,7 +2,7 @@
 
   <param name="/use_sim_time" value="false" />
 
-  <!-- RPLIDAR
+  <!-- RPLIDAR-->
   <node name="rplidarNode" pkg="rplidar_ros" type="rplidarNode" output="screen">
     <param name="serial_port"      value="/dev/ttyUSB0"/>
     <param name="serial_baudrate"  value="115200"/>
@@ -10,7 +10,7 @@
     <param name="inverted"         value="false"/>
     <param name="angle_compensate" value="true"/>
   </node>
-  -->
+  
 
     <!-- laser_detection -->
     <node name="detection" pkg="laser_detection" type="detection" output="screen">
@@ -18,12 +18,12 @@
     </node>
     <node name="occ_grid" pkg="laser_detection" type="occ_grid" output="screen" />
       
-    <!-- Stanley Controller 
+    <!-- Stanley Controller -->
     <node name="stanley" pkg="laser_detection" type="stanley.py" output="screen" />
-    -->
-    <!-- Lane Controller
-    <node name="lane" pkg="laser_detection" type="lane.py" output="screen" />
-    -->
+    
+    <!-- Lane Controller-->
+    <node name="run" pkg="lane_detection" type="run.py" output="screen" />
+    
     
     <!-- Parking Planner-->
     <node name="parking" pkg="laser_detection" type="parking.py" output="screen" />

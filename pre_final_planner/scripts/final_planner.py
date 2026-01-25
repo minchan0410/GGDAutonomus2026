@@ -17,8 +17,12 @@ SPEED_MID  = 150
 SPEED_HIGH = 255
 
 LC_STEER      = 22.5
-STEER_TIME    = 1
-STRAIGHT_TIME = 1
+STEER_TIME1    = 1
+STEER_TIME2    = 1
+STEER_TIME3    = 1
+
+STRAIGHT_TIME1 = 1
+STRAIGHT_TIME2 = 1
 
 
 class FinalPlanner:
@@ -63,8 +67,12 @@ class FinalPlanner:
         self.SPEED_HIGH = rospy.get_param("~speed_high", SPEED_HIGH)
 
         self.LC_STEER = rospy.get_param("~lc_steer", LC_STEER)
-        self.steer_time = rospy.get_param("~steer_time", STEER_TIME)
-        self.straight_time = rospy.get_param("~straight_time", STRAIGHT_TIME)
+        self.steer_time1 = rospy.get_param("~steer_time1", STEER_TIME1)
+        self.steer_time2 = rospy.get_param("~steer_time2", STEER_TIME2)
+        self.steer_time3 = rospy.get_param("~steer_time3", STEER_TIME3)
+
+        self.straight_time1 = rospy.get_param("~straight_time1", STRAIGHT_TIME1)
+        self.straight_time2 = rospy.get_param("~straight_time2", STRAIGHT_TIME2)
 
         self.ultrasonic_threshold = rospy.get_param("planner_common/ultrasonic/threshold", 300)
         self.queues_maxlen = rospy.get_param("~queues_maxlen", 10)
@@ -255,7 +263,7 @@ class FinalPlanner:
                     # STEP 0: 우로 꺾기
                     if self.lc_step == 0:
                         self.drive(-self.LC_STEER, self.SPEED_HIGH)
-                        if elapsed >= self.steer_time:
+                        if elapsed >= self.steer_time1:
                             self.lc_step = 1
                             self.start_time = rospy.Time.now()
 
@@ -269,7 +277,7 @@ class FinalPlanner:
                     # STEP 2: 좌로 꺾기
                     elif self.lc_step == 2:
                         self.drive(self.LC_STEER, self.SPEED_HIGH)
-                        if elapsed >= self.steer_time:
+                        if elapsed >= self.steer_time2:
                             self.lc_step = 3
                             self.start_time = rospy.Time.now()
 
@@ -289,26 +297,40 @@ class FinalPlanner:
                     # STEP 0: 좌로 꺾기
                     if self.lc_step == 0:
                         self.drive(self.LC_STEER, self.SPEED_HIGH)
-                        if elapsed >= self.steer_time:
+                        if elapsed >= self.steer_time1:
                             self.lc_step = 1
                             self.start_time = rospy.Time.now()
 
                     # STEP 1: 직진
                     elif self.lc_step == 1:
                         self.drive(0, self.SPEED_HIGH)
-                        if elapsed >= self.straight_time:
+                        if elapsed >= self.straight_time1:
                             self.lc_step = 2
                             self.start_time = rospy.Time.now()
 
                     # STEP 2: 우로 꺾기
                     elif self.lc_step == 2:
                         self.drive(-self.LC_STEER, self.SPEED_HIGH)
-                        if elapsed >= self.steer_time:
+                        if elapsed >= self.steer_time2:
                             self.lc_step = 3
                             self.start_time = rospy.Time.now()
 
-                    # STEP 3: 종료 -> lane_driving 복귀
+                    # STEP 3: 직진
                     elif self.lc_step == 3:
+                        self.drive(0, self.SPEED_HIGH)
+                        if elapsed >= self.straight_time2:
+                            self.lc_step = 4
+                            self.start_time = rospy.Time.now()
+
+                    # STEP 4: 좌꺽
+                    elif self.lc_step == 4:
+                        self.drive(0, self.SPEED_HIGH)
+                        if elapsed >= self.steer_time3:
+                            self.lc_step = 5
+                            self.start_time = rospy.Time.now()
+
+                    # STEP 3: 종료 -> lane_driving 복귀
+                    elif self.lc_step == 5:
                         with self.lock:
                             self._exit_lane_change_to_lane_driving(set_wait_for_traffic=False)
 

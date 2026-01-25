@@ -14,7 +14,7 @@ L = 0.8 # 휠베이스
 K = 20
 TH_MAX               = 1
 CAN_PARK_TH          = -2
-FORWARD_SPEED        = 50
+FORWARD_SPEED        = 125
 BACKWARD_SPEED       = -100
 PAUSE_TIME           = 0.5
 PARKING_PAUSE_TIME   = 2
@@ -526,7 +526,7 @@ class Parking:
             rospy.loginfo_once("Parking lot detected")
 
         
-    def roi(self, point, state, r_min=1.5, r_max=2.5):
+    def roi(self, point, state, r_min=0.3, r_max=3):
 
         if point is None or len(point) == 0:
             return point
@@ -557,8 +557,8 @@ class Parking:
 
             # (2) 각도 조건 (laser 기준 -30 ~ +30 deg)
             angles = np.arctan2(dy, dx)   # rad
-            angle_mask = (angles >= -math.radians(30)) & \
-                        (angles <=  math.radians(30))
+            angle_mask = (angles >= -math.radians(90)) & \
+                        (angles <=  math.radians(90))
 
             # (3) 최종 ROI
             mask = dist_mask & angle_mask
@@ -826,7 +826,7 @@ class Parking:
 
         self.roi_marker_pub.publish(marker)
         
-    def publish_full_left_roi_filled(self, center, r_min=1.5, r_max=2.5):
+    def publish_full_left_roi_filled(self, center, r_min=0.3, r_max=3):
         marker = Marker()
         marker.header.frame_id = "laser"
         marker.header.stamp = rospy.Time.now()
@@ -849,8 +849,8 @@ class Parking:
         # -------------------------------
         # 각도 제한: -30 ~ +30 deg (laser 기준)
         # -------------------------------
-        ang_min = -math.radians(30)
-        ang_max =  math.radians(30)
+        ang_min = -math.radians(90)
+        ang_max =  math.radians(90)
 
         num = 40  # 부채꼴 해상도
         angles = np.linspace(ang_min, ang_max, num)

@@ -20,7 +20,7 @@ class LaneDetector:
         
         # [설정] 무조건 토픽 구독 모드로 고정
         self.camera_topic = rospy.get_param("~camera_topic", "/cam1/usb_cam/image_raw")
-        self.output_topic = rospy.get_param("~output_topic", "lane_steer")
+        self.output_topic = rospy.get_param("~output_topic", "/parking_lane_steer")
         
         # [기존 파라미터]
         self.height_usage_ratio = rospy.get_param("~height_usage_ratio", 0.4)
@@ -232,7 +232,7 @@ class LaneDetector:
         current_avg_angle = weighted_avg_angle if weighted_avg_angle is not None else 0.0
 
         angle_msg = Int16()
-        angle_msg.data = int(current_avg_angle)
+        angle_msg.data = - int(current_avg_angle * 0.7)
         self.angle_pub.publish(angle_msg)
 
         # 화살표 그리기
