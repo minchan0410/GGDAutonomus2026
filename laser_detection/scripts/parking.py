@@ -14,6 +14,7 @@ import threading
 L = 0.8 # 휠베이스
 K = 20
 TH_MAX               = 1
+CAN_PARK_TH          = 1
 FORWARD_SPEED        = 50
 BACKWARD_SPEED       = -100
 PAUSE_TIME           = 0.5
@@ -36,7 +37,6 @@ class Parking:
         rospy.Subscriber("/detection_poses",PoseArray,self.detection_poses_callback,queue_size=1)
         rospy.Subscriber("/parking_lane_steer", Int16, self.lane_steer_callback, queue_size=1)
         rospy.Subscriber("/parking_stanley_steer", Int16, self.stanley_steer_callback, queue_size=1)
-        rospy.Subscriber("/is_lane_detected", Bool, self.lane_detected_callback, queue_size=1)
         
         self.motor_cmd_steer_pub = rospy.Publisher("/des_steer", Int16, queue_size=1)
         self.motor_long_pub = rospy.Publisher("/motor_cmd_long", Int16, queue_size=1)
@@ -46,55 +46,87 @@ class Parking:
         
         self.ultrasonics = [10000, 10000, 10000, 10000]
         
-        
+        # ====================
+        # --------streak------
         self.parking_lot_streak = 0
         self.first_car_streak = 0
-        self.first_car_detected = False
+        self.second_car_streak = 0
         self.finish_streak = 0
         self.parked_streak = 0
         self.pulled_streak = 0
+        # ====================
+        
+        
+        # ====================
+        # --------steer-------
         self.stanley_steer = 0
-        self.is_lane_detected = False
-        self.filtered_point = None
-        self.lane_detect_queue = deque(maxlen=10)
-        self.to_finish = False
-        self.can_start_parking = False
-        self.parked = False
-        self.start_time = None
-        self.mission_completed = False
-        self.pulled_out = False
-        self.filtered_point = np.empty((2, 2))     # (2,2) numpy array
-        self.reject_count = 0       # 유사성 실패 누적
+        self.lane_steer    = 0
+        # ====================
+
+
+        # ====================
+        # --------flag--------
+        self.first_car_detected  = False
+        self.second_car_detected = False
+        self.can_start_parking   = False
+        self.parked              = False
+        self.pulled_out          = False
+        self.to_finish           = False
+        
+        self.both_updated = False
+        # ====================
+        
+        
+        # ====================
+        # --------state-------
         self.mode = "DEFAULT"
         self.state = None
         self.prev_state = None
+        # ====================
         
-        self.lane_driving_enter_time = None
-        self.lane_driving_delay = rospy.Duration(5.0)  # 5초
+        
+        # ====================
+        # -------variable-----
+        self.start_time = None
+        self.first_car = np.full((1, 2), np.nan)
+        self.second_car = np.full((1, 2), np.nan)
+        self.filtered_points = np.vstack([self.first_car, self.second_car])
+        # ====================
 
-        
+
+        # ====================
+        # -------keyboard-----
         self.lock = threading.Lock()
         th = threading.Thread(target=self.keyboard_listener, daemon=True)
         th.start()
+        # ====================
         
+        
+        # ====================
+        # ------debugging-----
         self.stanley_debug = True   # TODO
         # self.stanley_debug = False   # TODO
+        # ====================
         
+        
+        # ====================================================================================================
+        # ------------------------------------------main loop-------------------------------------------------
         self.rate = rospy.Rate(20)
-        
         if self.stanley_debug:
             rospy.logwarn_once("STANLEY DEBUG MODE ENABLED")
-            # self.filtered_point = np.array([[-5, 1.0],[-4.5, 2.0]])
-            # self.filtered_point = np.array([[-5, 1.0],[-4.5, 2.0]])
+            # self.filtered_points = np.array([[-5, 1.0],[-4.5, 2.0]])
+            # self.filtered_points = np.array([[-5, 1.0],[-4.5, 2.0]])
             
             self.state = "stanley"
             while not rospy.is_shutdown():
-                rospy.loginfo_throttle(1.0, f"state: {self.state}, destination: {np.mean(self.filtered_point, axis=0)[0]:.2f}, {np.mean(self.filtered_point, axis=0)[1]:.2f}")
-                self.stanley_path(self.filtered_point) # fixed point
+                rospy.loginfo_throttle(1.0, f"state: {self.state}")
+                self.stanley_path(self.filtered_points) # fixed point
                 self.rate.sleep()
                 
         else:
             self.run()
+        # ====================================================================================================
+            
     
     def keyboard_listener(self):
         """
@@ -155,7 +187,7 @@ class Parking:
     def run(self):
         
         while not rospy.is_shutdown():
-            rospy.loginfo_throttle(0.5, f"state: {self.state}, filtered_point: {self.filtered_point}")
+            rospy.loginfo_throttle(0.5, f"state: {self.state}, filtered_points: {self.filtered_points}")
 
             if self.mode == "DEFAULT":
                 self.drive(0,0)
@@ -166,7 +198,6 @@ class Parking:
                         self.drive(self.lane_steer, FORWARD_SPEED)
                     else:
                         self.state = "full_left_steer"
-                        self.start_time = None
                         continue
 
                 if self.state == "full_left_steer":              # 주차 공간 발견 후 왼쪽으로 살짝 꺾어서 각 만드는 단계
@@ -187,8 +218,11 @@ class Parking:
                     
                 if self.state == "stanley":                 # 후진해서 주차하는 단계
                     if not self.parked:
-                        self.drive(self.stanley_steer, BACKWARD_SPEED)
-                        self.sonic_check()
+                        if self.both_updated:
+                            self.drive(self.stanley_steer, BACKWARD_SPEED)
+                            self.sonic_check()
+                        else:
+                            self.drive(0, BACKWARD_SPEED)
                     else:
                         self.state = "stop"
                         self.start_time = rospy.Time.now()
@@ -228,18 +262,6 @@ class Parking:
                     
     
     def lane_steer_callback(self, msg): self.lane_steer = msg.data
-
-    def lane_detected_callback(self, msg):
-        
-        self.lane_detect_queue.append(msg.data)
-        true_count = sum(self.lane_detect_queue)
-
-        if not self.is_lane_detected:
-            if true_count >= 7:
-                self.is_lane_detected = True
-        else:
-            if true_count <= 3:
-                self.is_lane_detected = False
     
     def stanley_steer_callback(self, msg): self.stanley_steer = msg.data
         
@@ -252,195 +274,173 @@ class Parking:
     # def ultrasonic5_callback(self, msg): self.ultrasonics[3] = msg.data
 
     def detection_poses_callback(self, msg):
-        point = np.array([[pose.position.x, pose.position.y] for pose in msg.poses],dtype=float)
         
-        point_debug = np.asarray(point)
-
-        if point_debug.ndim == 1:
-            rospy.logwarn_throttle(
-                1.0, "[detection] single point received, skipping 2car check"
-            )
-            return
-
-        if point_debug.shape[0] < 2:
-            rospy.logwarn_throttle(
-                1.0, "[detection] insufficient points for 2car 판단"
-            )
-            return
-
+        points = np.array([[pose.position.x, pose.position.y] for pose in msg.poses],dtype=float)
+        self.both_updated = False
+        
+        if self.first_car_detected and self.second_car_detected:
+            first_updated  = self.track_first_car(points)
+            second_updated = self.track_second_car(points)
+            self.both_updated = first_updated and second_updated
+            
+            if self.both_updated:
+                self.filtered_points = np.vstack([self.first_car, self.second_car])
+        
+        
         if self.state == "lane_driving":
-            now = rospy.Time.now()
-            
-            if self.lane_driving_enter_time is None:
-                self.lane_driving_enter_time = now
-                
-            if now - self.lane_driving_enter_time < self.lane_driving_delay:
-                return
-
             if not self.first_car_detected:
-                if not self.is_first_car(point):
-                    print("not first car")
-                    self.first_car_streak = 0
-                    return
-                print("first car")
-                self.first_car_streak += 1
-
-                if self.first_car_streak >= 5:
-                    self.first_car_detected = True
-                    rospy.loginfo_once("First car detected")
+                self.detect_first_car(points)
             
-        else:
-            self.lane_driving_enter_time = None
-
-            if not self.can_start_parking:
-                if not self.is_2car1(point): # TODO 꼭 2개가 아니어도 ROI 내 좌표들의 부호를 가지고 판단할 수 있어야 함
-                    self.parking_lot_streak = 0
-                    return
-                # 2개 보장
-                self.parking_lot_streak += 1
-
-                if self.parking_lot_streak >= 3 and self.is_stop_cond(point):
-                    self.can_start_parking = True
-
-                    self.filtered_point = point.copy()
-                    rospy.loginfo_once("Parking lot detected")
-
-            else: # TODO 점 3~ 4개 나와도 그거 활용하면서 2개 뽑는 로직도 있어야 함
-
-                if not self.is_2car2(point):
-                    self.reject_count += 1
-                    print("not two car")
-                    return
-                # 2개 보장
-                print("two car")
-
-                dist = self.pair_distance(self.filtered_point, point)
-                adaptive_thresh = min(TH_MAX, 0.5 + 0.2 * self.reject_count)
-
-                if dist <= adaptive_thresh:
-                    self.filtered_point = point.copy()
-                    self.reject_count = 0
-                    print(f"destination updated, avg dist: {dist/2:.2f}")
-                else:
-                    self.reject_count += 1
-                    if self.reject_count >= 20:
-                        self.filtered_point = point.copy()
-                        self.reject_count = 0
-                        print("Forced parking point update")
+            
+        elif self.state == "full_left_steer":
+            if not self.second_car_detected:
+                self.detect_second_car(points)
+            else:
+                self.determine_can_parking(self.filtered_points)
                 
-                self.stanley_path(self.filtered_point) # debug ＃ TODO
                 
-
-    def is_first_car(self, point):
+        elif self.state in ["pause_after_left", "stanley"]:
+            self.stanley_path(self.filtered_points) 
+            
+                
+    def detect_first_car(self, point):
         
-        mask = (
-            (point[:, 0] >= -1) & (point[:, 0] <= 1) &
-            (point[:, 1] >=  -3) & (point[:, 1] <= -1)
-        )
-
-        point = point[mask]
+        point = self.roi(point, "lane_driving")
         
         if point.shape[0] != 1:
-            return False
-        
+            print("not first car")
+            self.first_car_streak = 0
+            return
+ 
+        print("first car")
+        self.first_car_streak += 1
 
-        return True
-
-    def is_2car1(self, point):
-        """
-        두 클러스터가 '주차된 두 차량'이라고 볼 수 있는지 판정:
-        1) 점이 정확히 2개
-        2) 두 점 사이 거리 > 0.8m
-        """
-        r_min = 1.0   # 안쪽 원 반지름
-        r_max = 5.0   # 바깥 원 반지름
-
-        r = np.linalg.norm(point, axis=1)
-
-        # 두 원 사이에 있는 점만 선택
-        mask = (r >= r_min) & (r <= r_max)
-        point = point[mask]
-        # TODO ROI 각도 설정 까지 추가
-        
-        if point.shape[0] != 2:
-            return False
-        
-        dx = point[1, 0] - point[0, 0]
-        dy = point[1, 1] - point[0, 1]
-        if not 1.5 <= math.sqrt(dx**2 + dy**2) <= 3:
-            return False
-        
-        return True
+        if self.first_car_streak >= 5:
+            self.first_car_detected = True
+            self.first_car = point
+            rospy.loginfo_once("First car detected")
     
-    def is_2car2(self, point):
-        point = np.asarray(point)
+    
+    def detect_second_car(self, point):
+        
+        point = self.roi(point, "full_left_steer")
+        
+        if point.shape[0] != 1:
+            print("not second car")
+            self.second_car_streak = 0
+            return
+        
+        print("second car")
+        self.second_car_streak += 1
+        
+        if self.second_car_streak >= 5:
+            self.second_car_detected = True
+            self.second_car = point
+            rospy.loginfo_once("Second car detected")
+            
 
-        # 최소 2개 필요
-        if point.ndim != 2 or point.shape[0] < 2:
-            print("1")
+    def track_first_car(self, point, max_dist=0.2):
+        """
+        point: np.ndarray (N, 2) - 현재 프레임의 후보 점들
+        max_dist: float - 추적 허용 반경 (m)
+        """
+        if point is None or len(point) == 0:
             return False
 
-        # -------------------------------
-        # 🔥 가장 가까운 2개 포인트 선택
-        # -------------------------------
-        N = point.shape[0]
-        min_dist2 = float("inf")
-        best_pair = None
+        # (1,2) → (2,)
+        prev = self.first_car.reshape(2)
 
-        for i in range(N):
-            for j in range(i + 1, N):
-                dx = point[i, 0] - point[j, 0]
-                dy = point[i, 1] - point[j, 1]
-                d2 = dx*dx + dy*dy
+        # 거리 계산 (N,)
+        dists = np.linalg.norm(point - prev, axis=1)
 
-                if d2 < min_dist2:
-                    min_dist2 = d2
-                    best_pair = (i, j)
+        # 가장 가까운 점
+        min_idx = np.argmin(dists)
+        min_dist = dists[min_idx]
 
-        # 두 개로 point 재정의
-        point = point[list(best_pair), :]   # shape (2,2)
-
-        # -------------------------------
-        # 기존 로직
-        # -------------------------------
-
-        # 각 포인트 5m 이내
-        # if (point[:, 0]**2 + point[:, 1]**2 > 5.0**2).any():
-        #     print("2")
-        #     return False
-
-        # # 두 점 사이 거리
-        # dx = point[1, 0] - point[0, 0]
-        # dy = point[1, 1] - point[0, 1]
-        # dist2 = dx*dx + dy*dy
-
-        # if not (0.8**2 <= dist2 <= 1.5**2):
-        #     print("3")
-        #     return False
-
-        return True
-
-    
-    def is_stop_cond(self, point):
+        if min_dist <= max_dist:
+            # 추적 성공 → 업데이트
+            self.first_car = point[min_idx].reshape(1, 2)
+            print("first car updated")
+            return True
+        else:
+            # 추적 실패
+            return False
         
-        return point[0, 1] * point[1, 1] < 0
+        
+    def track_second_car(self, point, max_dist = 0.2):
+        """
+        point: np.ndarray (N, 2) - 현재 프레임의 후보 점들
+        max_dist: float - 추적 허용 반경 (m)
+        """
 
-    def pair_distance(self, A, B):
-        d1 = np.linalg.norm(A[0] - B[0]) + np.linalg.norm(A[1] - B[1])
-        d2 = np.linalg.norm(A[0] - B[1]) + np.linalg.norm(A[1] - B[0])
-        return min(d1, d2)
+        if point is None or len(point) == 0:
+            return False
+
+        # (1,2) → (2,)
+        prev = self.second_car.reshape(2)
+
+        # 거리 계산 (N,)
+        dists = np.linalg.norm(point - prev, axis=1)
+
+        # 가장 가까운 점
+        min_idx = np.argmin(dists)
+        min_dist = dists[min_idx]
+
+        if min_dist <= max_dist:
+            # 추적 성공 → 업데이트
+            self.second_car = point[min_idx].reshape(1, 2)
+            print("second car updated")
+            return True
+        else:
+            # 추적 실패
+            return False
+    
+    
+    def determine_can_parking(self, points):
+        
+        if points[0, 1] + points[1, 1] < CAN_PARK_TH:
+            self.can_start_parking = True
+            rospy.loginfo_once("Parking lot detected")
+
+                
+    def roi(self, point, state, r_min=1.2, r_max=2):
+        
+        if point is None or len(point) == 0:
+            return point
+
+        if state == "lane_driving":
+            mask = (
+                (point[:, 0] >= -1) & (point[:, 0] <= 1) &
+                (point[:, 1] >= -3) & (point[:, 1] <= -1)
+            )
+            return point[mask]
+
+        elif state == "full_left_steer":
+
+            # 첫 차가 아직 확정 안 됐으면 ROI 적용 불가
+            if not self.first_car_detected:
+                return point
+
+            # 기준점 (첫 차)
+            center = self.first_car.reshape(2)
+
+            # 기준점 기준 거리 제곱
+            dist2 = (point[:, 0] - center[0])**2 + (point[:, 1] - center[1])**2
+
+            mask = (dist2 >= r_min**2) & (dist2 <= r_max**2)
+            return point[mask]
+                
 
     def drive(self, des_steer, long_cmd):
         # return
         self.motor_cmd_steer_pub.publish(Int16(int(des_steer)))
         self.motor_long_pub.publish(Int16(int(long_cmd)))
     
-    def stanley_path(self, filtered_point):
-        if filtered_point is None or len(filtered_point) < 2:
-            rospy.logwarn_throttle(1.0, "[stanley_path] need at least 2 points")
-            return None
-        dest = np.mean(filtered_point, axis=0)
-        v = filtered_point[1] - filtered_point[0]
+    
+    def stanley_path(self, filtered_points):
+        
+        dest = np.mean(filtered_points, axis=0)
+        v = filtered_points[1] - filtered_points[0]
 
         n = np.array([-v[1], v[0]])
         n_hat = n / np.linalg.norm(n)
@@ -477,9 +477,11 @@ class Parking:
 
         # ---------- 7. publish ----------
         self.stanley_path_pub.publish(path_msg)
+        rospy.loginfo_throttle(1.0, "publishing stanley path")
         self.publish_destination_marker(dest)
-        self.publish_filtered_points_marker(filtered_point)
-        self.publish_filtered_points_line(filtered_point)
+        self.publish_filtered_points_marker(filtered_points)
+        self.publish_filtered_points_line(filtered_points)
+        
         
     def sonic_check(self):
         
@@ -571,7 +573,7 @@ class Parking:
         if points is None or points.shape != (2, 2):
             return
 
-        radius = 0.4        # 원 반지름 (m)
+        radius = 0.2        # 원 반지름 (m)
         num_segments = 40   # 원 해상도
 
         for i, (cx, cy) in enumerate(points):
