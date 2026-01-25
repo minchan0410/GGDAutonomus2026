@@ -25,13 +25,21 @@ class Stanley:
         
         
     def cb_path(self, msg: Path):
+        
         if not msg.poses:
+            self.path = None
+            self.clear_stanley_markers()
+            self.steer_pub.publish(Int16(int(0)))   # ⭐ 중요
+            rospy.logwarn_throttle(1.0, "Stanley path invalid → clearing RViz markers")
             return
 
         self.path_yaw = self.get_path_yaw(msg)
-        path = np.array([[p.pose.position.x, p.pose.position.y] for p in msg.poses], dtype=float)
+        path = np.array(
+            [[p.pose.position.x, p.pose.position.y] for p in msg.poses],
+            dtype=float
+        )
 
-        # path 점의 진행방향(끝-처음)이 yaw 방향과 반대면 뒤집기
+        # path 방향 정렬
         dir_pts = path[-1] - path[0]
         dir_yaw = np.array([math.cos(self.path_yaw), math.sin(self.path_yaw)])
         if np.dot(dir_pts, dir_yaw) < 0:
@@ -44,8 +52,6 @@ class Stanley:
     def stanley(self):
         if self.path is None:
             return
-
-        
         motion_yaw = math.pi
 
         dists = np.linalg.norm(self.path, axis=1)
@@ -107,14 +113,17 @@ class Stanley:
         self.publish_debug_vectors(ref)
         self.publish_debug_text()   
 
-    
-    # ---------------- yaw from path ----------------
+
     def get_path_yaw(self, msg: Path):
         # parking.py에서 orientation을 z,w만 넣어줬으니(roll=pitch=0) yaw는 이렇게 복원 가능
         q = msg.poses[0].pose.orientation
         _, _, yaw = euler_from_quaternion([q.x, q.y, q.z, q.w])
         return yaw
 
+
+    def wrap(self, ang):
+        # range : [-π, π)
+        return (ang + math.pi) % (2*math.pi) - math.pi
 
     # ---------------- markers ----------------
     def publish_markers(self, closest, steer):
@@ -225,10 +234,6 @@ class Stanley:
         # ---------------- utils ----------------
     
     
-    def wrap(self, ang):    # range : [-π, π)
-        return (ang + math.pi) % (2*math.pi) - math.pi
-
-
     def publish_arrow(self, ns, mid, yaw, color, length, stamp):
         m = Marker()
         m.header.frame_id = "laser"
@@ -331,6 +336,29 @@ class Stanley:
         )
 
         self.marker_pub.publish(m)
+
+
+    def clear_stanley_markers(self):
+        now = rospy.Time.now()
+
+        def delete(ns, mid):
+            m = Marker()
+            m.header.frame_id = "laser"
+            m.header.stamp = now
+            m.ns = ns
+            m.id = mid
+            m.action = Marker.DELETE
+            return m
+
+        # ----- 모두 지우기 -----
+        self.marker_pub.publish(delete("closest", 0))
+        self.marker_pub.publish(delete("predicted_curve", 1))
+        self.marker_pub.publish(delete("motion_yaw", 10))
+        self.marker_pub.publish(delete("path_yaw", 11))
+        self.marker_pub.publish(delete("lateral_error", 12))
+        self.marker_pub.publish(delete("heading_error_arc", 13))
+        self.marker_pub.publish(delete("debug_text", 20))
+
 
 if __name__ == "__main__":
     try:
