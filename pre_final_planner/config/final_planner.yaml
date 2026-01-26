@@ -4,9 +4,9 @@ planner_common:
     # min/max는 ROI 박스의 전/후(x) 및 좌/우(y) 경계
     # offset_x는 ROI를 전방으로 이동시키는 보정값
     min_x: 0.0
-    max_x: 1.0
-    min_y: -0.3
-    max_y: 0.3 #왼쪽
+    max_x: 1.5
+    min_y: -0.45
+    max_y: 0.45 #왼쪽
     offset_x: 0.7
   ultrasonic:
     # 초음파 센서 값 전처리 설정
@@ -25,12 +25,17 @@ final_planner:
   rate_hz: 20
   default_motor: 0
   speed_0: 0
-  speed_mid: 150
+  speed_mid: 255
   speed_high: 255
   lc_steer: 22.5
-  steer_time: 1
-  straight_time: 1
-  queues_maxlen: 10
-  yolo_count_threshold: 7
+
+  steer_time1: 1.7
+  straight_time1: 0.4
+  steer_time2: 2.3
+  straight_time2: 0.0
+  steer_time3: 0.6
+
+  queues_maxlen: 5
+  yolo_count_threshold: 3
   ultrasonic_count_threshold: 7
   traffic_red_threshold: 5

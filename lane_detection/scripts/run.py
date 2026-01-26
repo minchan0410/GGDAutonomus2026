@@ -232,7 +232,7 @@ class LaneDetector:
         current_avg_angle = weighted_avg_angle if weighted_avg_angle is not None else 0.0
 
         angle_msg = Int16()
-        angle_msg.data = -int(current_avg_angle)
+        angle_msg.data = - int(current_avg_angle * 0.7)
         self.angle_pub.publish(angle_msg)
 
         # 화살표 그리기
