@@ -1,7 +1,7 @@
 vehicle:
   full_left_steer: 22.5
   full_right_steer: -22.5
-  forward_speed: 125
+  forward_speed: 150
   backward_speed: -100
 
 timing:

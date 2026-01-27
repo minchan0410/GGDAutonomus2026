@@ -743,10 +743,10 @@ class Parking:
         marker.scale.y = 1.0
         marker.scale.z = 1.0
 
-        marker.color.r = 1.0
-        marker.color.g = 0.0
-        marker.color.b = 1.0
-        marker.color.a = 0.25
+        marker.color.r = 0.0
+        marker.color.g = 1.0
+        marker.color.b = 0.0
+        marker.color.a = 0.45   # 0.25 -> 0.45~0.6 추천
 
         # 각도 범위: -ang ~ +ang (roi()와 동일)
         ang_min = -ang
@@ -779,6 +779,7 @@ class Parking:
             marker.points += [o1, i2, o2]
 
         self.roi_marker_pub.publish(marker)
+        
     # 파란 반투명 부채꼴 도넛(TRIANGLE_LIST): full_left_steer 상태에서 first_car를 중심으로 하는 ROI (r_min~r_max + ±angle) = “두 번째 차를 찾는 검색 구역”
 
     def clear_stanley_markers(self):
@@ -831,19 +832,15 @@ class Parking:
             if np.any(np.isnan(p)):
                 return "(NaN, NaN)"
             return f"({p[0]:+.2f}, {p[1]:+.2f})"
-
-        f_color = "BLUE" if self.first_updated else "RED"
-        s_color = "BLUE" if self.second_updated else "RED"
-
         text = (
             f"[ PARKING DEBUG ]\n\n"
             f"STATE : {self.state}\n\n"
-            f"FIRST CAR  [{f_color}]\n"
-            f" detected : {self.first_car_detected}\n"
-            f" pos      : {fmt(self.first_car.reshape(2))}\n\n"
-            f"SECOND CAR [{s_color}]\n"
-            f" detected : {self.second_car_detected}\n"
-            f" pos      : {fmt(self.second_car.reshape(2))}\n\n"
+            f"FIRST CAR\n"
+            f"   detected : {self.first_car_detected}\n"
+            f"   pos      : {fmt(self.first_car.reshape(2))}\n\n"
+            f"SECOND CAR\n"
+            f"   detected : {self.second_car_detected}\n"
+            f"   pos      : {fmt(self.second_car.reshape(2))}\n\n"
             f"STEER SOURCE   : {self.steer_source}\n"
             f"CUR STANLEY TH (up to > {self.CAN_PARK_TH}): {self.can_park_TH}"
         )
