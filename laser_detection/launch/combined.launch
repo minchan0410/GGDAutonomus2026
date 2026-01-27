@@ -16,7 +16,9 @@
     <node name="detection" pkg="laser_detection" type="detection" output="screen">
         <rosparam command="load" file="$(find laser_detection)/config/params.yaml" />
     </node>
-    <node name="occ_grid" pkg="laser_detection" type="occ_grid" output="screen" />
+
+    <!-- occupancy grid -->
+    <!-- <node name="occ_grid" pkg="laser_detection" type="occ_grid" output="screen" /> -->
       
     <!-- Stanley Controller -->
     <node name="stanley" pkg="laser_detection" type="stanley.py" output="screen" />
