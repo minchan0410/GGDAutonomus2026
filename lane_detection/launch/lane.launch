@@ -9,7 +9,7 @@
         <rosparam command="load" file="$(find lane_detection)/config/setup.yaml" />
     </node>
 
-    <node pkg="lane_detection" type="cur_lane_detector.py" name="cur_lane_detector" output="screen">
+    <!-- <node pkg="lane_detection" type="cur_lane_detector.py" name="cur_lane_detector" output="screen">
         <rosparam command="load" file="$(find lane_detection)/config/cur_lane_detector.yaml" />
-    </node>
+    </node> -->
 </launch>

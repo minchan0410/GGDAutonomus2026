@@ -11,7 +11,7 @@ planner_common:
   ultrasonic:
     # 초음파 센서 값 전처리 설정
     # threshold를 넘는 값만 유효로 판단, unit_scale로 단위 변환
-    threshold: 500.0
+    threshold: 800.0
     unit_scale: 0.001   # mm -> m
 
 final_planner:
@@ -39,4 +39,4 @@ final_planner:
   yolo_count_threshold: 3
   ultrasonic_count_threshold: 3
   traffic_green_threshold: 3
-  traffic_green_timeout: 10.0
+  traffic_green_timeout: 60.0

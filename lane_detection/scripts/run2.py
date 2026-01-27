@@ -316,8 +316,8 @@ class LaneDetector:
         new_h = int(combined.shape[0] * scale)
         combined_small = cv2.resize(combined, (new_w, new_h))
         
-        cv2.imshow('Lane Detector', combined_small)
-        cv2.waitKey(1)
+        # cv2.imshow('Lane Detector', combined_small)
+        # cv2.waitKey(1)
 
         end_time = time.time()
         elapsed_time = int((end_time - start_time) * 1000) 

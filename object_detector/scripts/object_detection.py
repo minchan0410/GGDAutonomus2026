@@ -27,6 +27,11 @@ class ObjectDetectionNode:
         self.car_name = rospy.get_param("~car_class_name")
         self.car_topic = rospy.get_param("~car_topic")
 
+        # ---- ROI 설정 (하단 제외 영역) ----
+        # 예: 0.2로 설정하면 이미지 하단 20% 영역에 있는 객체는 무시함
+        self.roi_bottom_exclude_ratio = float(rospy.get_param("~roi/bottom_exclude_ratio", 0.1))
+        self.ov_draw_roi_line = bool(rospy.get_param("~overlay/draw_roi_line", True))
+
         # 반드시 20Hz로 publish
         self.pub_rate = float(rospy.get_param("~pub_rate", 20.0))
         self.frame_id_fallback = rospy.get_param("~frame_id", "")
@@ -64,8 +69,7 @@ class ObjectDetectionNode:
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.pub_rate), self.on_timer)
 
         rospy.loginfo(f"[object_detection] model={self.model_path} conf={self.conf_thres} device={self.device}")
-        rospy.loginfo(f"[object_detection] car_ids={self.car_ids} filter_ids={self.filter_ids}")
-        rospy.loginfo(f"[object_detection] pub_rate={self.pub_rate}Hz")
+        rospy.loginfo(f"[object_detection] ROI excluded bottom ratio={self.roi_bottom_exclude_ratio*100}%")
         rospy.loginfo(f"[object_detection] pub car={self.car_topic} overlay={self.ov_topic if self.ov_enable else 'disabled'}")
 
     def cb_img(self, msg: Image):
@@ -124,11 +128,14 @@ class ObjectDetectionNode:
         car_arr.header = header
 
         if frame is None:
-            # 아직 이미지 못 받았어도 20Hz로 빈 토픽 계속 송신
             self.pub_car.publish(car_arr)
             return
 
         H, W = frame.shape[:2]
+        
+        # [ROI 설정] 유효한 Y 좌표 한계선 계산 (이 값보다 크면(=아래면) 무시)
+        # roi_bottom_exclude_ratio가 0.2라면, H * 0.8 위치가 경계선
+        valid_y_limit = int(H * (1.0 - self.roi_bottom_exclude_ratio))
 
         try:
             pred = self.model.predict(
@@ -141,7 +148,6 @@ class ObjectDetectionNode:
         except Exception as e:
             rospy.logwarn_throttle(1.0, f"[object_detection] YOLO predict failed: {e}")
             self.pub_car.publish(car_arr)
-            # 오버레이는 그냥 원본이라도 내보내고 싶으면 아래 유지
             if self.ov_enable and (self.pub_overlay is not None):
                 out_img = self.bridge.cv2_to_imgmsg(frame, encoding="bgr8")
                 out_img.header = header
@@ -159,19 +165,36 @@ class ObjectDetectionNode:
                 x2 = int(np.clip(x2, 0, W - 1))
                 y1 = int(np.clip(y1, 0, H - 1))
                 y2 = int(np.clip(y2, 0, H - 1))
+                
+                # 중심점 계산
+                cy = (y1 + y2) / 2.0
+
+                # [ROI 필터링]
+                # 중심점이 제한선(valid_y_limit)보다 아래에 있으면(값이 더 크면) 무시
+                if cy > valid_y_limit:
+                    continue
 
                 # car만 Detection2DArray에 넣음(=pub되는 것)
                 if c in self.car_ids:
                     det = self.make_det(header, x1, y1, x2, y2, c, p)
                     car_arr.detections.append(det)
 
-        # 핵심: 매 틱마다 무조건 publish
+        # 핵심: 매 틱마다 무조건 publish (필터링된 결과만 전송됨)
         self.pub_car.publish(car_arr)
 
-        # --- 오버레이는 "pub된 car_arr" 기반으로만 그림 ---
+        # --- 오버레이 처리 ---
+        # 1. ROI 필터링된 car_arr 기반으로 그림 (따라서 제외된 객체는 안 그려짐)
+        # 2. ROI 경계선 그리기
         if self.ov_enable and (self.pub_overlay is not None):
             overlay = frame.copy()
 
+            # ROI 경계선 그리기 (파란색 선)
+            if self.ov_draw_roi_line and self.roi_bottom_exclude_ratio > 0.0:
+                cv2.line(overlay, (0, valid_y_limit), (W, valid_y_limit), (255, 0, 0), 2)
+                cv2.putText(overlay, "ROI Limit", (10, valid_y_limit - 10), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
+
+            # 필터링 통과한 객체만 그리기
             for det in car_arr.detections:
                 cx = det.bbox.center.x
                 cy = det.bbox.center.y
@@ -189,8 +212,6 @@ class ObjectDetectionNode:
             out_img = self.bridge.cv2_to_imgmsg(overlay, encoding="bgr8")
             out_img.header = header
             self.pub_overlay.publish(out_img)
-
-
 
 if __name__ == "__main__":
     rospy.init_node("object_detection")

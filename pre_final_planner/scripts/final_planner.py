@@ -34,7 +34,7 @@ class FinalPlanner:
 
         # ---- subs ----
         rospy.Subscriber("/lane_steer", Int16, self.lane_steer_callback, queue_size=1)
-        rospy.Subscriber("/ultrasonic1", Int16, self.ultrasonic1_callback, queue_size=1)
+        rospy.Subscriber("/ultrasonic", Int16, self.ultrasonic1_callback, queue_size=1)
         rospy.Subscriber("/cur_lane", Int16, self.cur_lane_callback, queue_size=1)
         rospy.Subscriber("/car_projected", PointStamped, self.car_projected_callback, queue_size=1)
         rospy.Subscriber("/traffic", Int16, self.traffic_callback, queue_size=1)
