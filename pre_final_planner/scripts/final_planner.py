@@ -80,7 +80,7 @@ class FinalPlanner:
         self.yolo_count_threshold = rospy.get_param("~yolo_count_threshold", 7)
         self.ultrasonic_count_threshold = rospy.get_param("~ultrasonic_count_threshold", 7)
 
-        self.traffic_red_threshold = rospy.get_param("~traffic_red_threshold", 5)
+        self.traffic_green_threshold = rospy.get_param("~traffic_green_threshold", 5)
 
         # ---- state ----
         self.mode = "DEFAULT"
@@ -103,14 +103,13 @@ class FinalPlanner:
 
         self.cur_lane = 2
 
-        self.start_time = None
-        self.wait_for_traffic = False
+        self.lc_start_time = None
 
         self.traffic_light = 0
         self.traffic_queue = deque(maxlen=self.queues_maxlen)
 
         self.crossline = False
-
+        self.traffic_stop = False
         self.run()
 
     # ---------------- callbacks ----------------
@@ -199,16 +198,6 @@ class FinalPlanner:
         self.state = target_state
         self.lane_change_reason = self._compute_reason()
 
-    def _exit_lane_change_to_lane_driving(self, set_wait_for_traffic: bool):
-        """
-        lane_change_* -> lane_driving 복귀 시점에 호출:
-        - state 리셋
-        - reason 리셋 (요구사항: lane_driving으로 돌아오면 초록 복귀)
-        """
-        self.state = "lane_driving"
-        self.start_time = None
-        self.wait_for_traffic = bool(set_wait_for_traffic)
-        self.lane_change_reason = "none"
 
     # ---------------- main loop ----------------
     def run(self):
@@ -224,10 +213,10 @@ class FinalPlanner:
             if state_local != self.last_state:
                 if state_local == "lane_driving":
                     rospy.loginfo("[lane_driving]")
-                elif state_local == "lane_change_to_left":
-                    rospy.loginfo("[lane change to left]")
-                elif state_local == "lane_change_to_right":
-                    rospy.loginfo("[lane change to right]")
+                elif state_local == "lane_change":
+                    rospy.loginfo("[lane change]")
+                elif state_local == "crossline":
+                    rospy.loginfo("[crossline]")
                 elif state_local == "traffic":
                     rospy.loginfo("[traffic]")
                 else:
@@ -242,118 +231,84 @@ class FinalPlanner:
             elif mode == "FINAL":
                 # lane driving
                 if self.state == "lane_driving":
-                    if self.wait_for_traffic:
-                        with self.lock:
-                            self.state = "traffic"
-                            self.traffic_queue.clear()
-                            # traffic 들어가도 reason은 lane change랑 무관하니 none 유지
+                    
                             self.lane_change_reason = "none"
                         # publish는 아래에서 공통으로 한 번에 함
                     else:
                         self.drive(lane_steer, self.SPEED_HIGH)
 
-                        # crash triggers -> decide lane change
+                        # crash triggers -> lane change
                         if self.ultrasonic_crash or self.yolo_crash:
-                            if self.cur_lane == 1:
-                                # lane 1이면 오른쪽으로 차선 변경
-                                with self.lock:
-                                    self._enter_lane_change("lane_change_to_right")
-                            elif self.cur_lane == 2:
-                                # lane 2이면 왼쪽으로 차선 변경
-                                with self.lock:
-                                    self._enter_lane_change("lane_change_to_left")
+                            with self.lock:
+                                self._enter_lane_change("lane_change")
 
-                # lane change to right
-                if self.state == "lane_change_to_right":
-                    if self.start_time is None:
-                        self.start_time = rospy.Time.now()
+                # lane change
+                if self.state == "lane_change":
+                    if self.lc_start_time is None:
+                        self.lc_start_time = rospy.Time.now()
                         self.lc_step = 0
 
-                    elapsed = (rospy.Time.now() - self.start_time).to_sec()
-
-                    # STEP 0: 우로 꺾기
-                    if self.lc_step == 0:
-                        self.drive(-self.LC_STEER, self.SPEED_HIGH)
-                        if elapsed >= self.steer_time1:
-                            self.lc_step = 1
-                            self.start_time = rospy.Time.now()
-
-                    # STEP 1: 직진
-                    elif self.lc_step == 1:
-                        self.drive(0, self.SPEED_HIGH)
-                        if elapsed >= self.straight_time:
-                            self.lc_step = 2
-                            self.start_time = rospy.Time.now()
-
-                    # STEP 2: 좌로 꺾기
-                    elif self.lc_step == 2:
-                        self.drive(self.LC_STEER, self.SPEED_HIGH)
-                        if elapsed >= self.steer_time2:
-                            self.lc_step = 3
-                            self.start_time = rospy.Time.now()
-
-                    # STEP 3: 종료 -> lane_driving 복귀 + traffic 대기
-                    elif self.lc_step == 3:
-                        with self.lock:
-                            self._exit_lane_change_to_lane_driving(set_wait_for_traffic=True)
-
-                # lane change to left
-                if self.state == "lane_change_to_left":
-                    if self.start_time is None:
-                        self.start_time = rospy.Time.now()
-                        self.lc_step = 0
-
-                    elapsed = (rospy.Time.now() - self.start_time).to_sec()
+                    lc_elapsed = (rospy.Time.now() - self.lc_start_time).to_sec()
 
                     # STEP 0: 좌로 꺾기
                     if self.lc_step == 0:
                         self.drive(self.LC_STEER, self.SPEED_HIGH)
-                        if elapsed >= self.steer_time1:
+                        if lc_elapsed >= self.steer_time1:
                             self.lc_step = 1
-                            self.start_time = rospy.Time.now()
+                            self.lc_start_time = rospy.Time.now()
 
                     # STEP 1: 직진
                     elif self.lc_step == 1:
                         self.drive(0, self.SPEED_HIGH)
-                        if elapsed >= self.straight_time1:
+                        if lc_elapsed >= self.straight_time1:
                             self.lc_step = 2
-                            self.start_time = rospy.Time.now()
+                            self.lc_start_time = rospy.Time.now()
 
                     # STEP 2: 우로 꺾기
                     elif self.lc_step == 2:
                         self.drive(-self.LC_STEER, self.SPEED_HIGH)
-                        if elapsed >= self.steer_time2:
+                        if lc_elapsed >= self.steer_time2:
                             self.lc_step = 3
-                            self.start_time = rospy.Time.now()
+                            self.lc_start_time = rospy.Time.now()
 
                     # STEP 3: 직진
                     elif self.lc_step == 3:
                         self.drive(0, self.SPEED_HIGH)
-                        if elapsed >= self.straight_time2:
+                        if lc_elapsed >= self.straight_time2:
                             self.lc_step = 4
-                            self.start_time = rospy.Time.now()
+                            self.lc_start_time = rospy.Time.now()
 
                     # STEP 4: 좌꺽
                     elif self.lc_step == 4:
                         self.drive(0, self.SPEED_HIGH)
-                        if elapsed >= self.steer_time3:
+                        if lc_elapsed >= self.steer_time3:
                             self.lc_step = 5
-                            self.start_time = rospy.Time.now()
+                            self.lc_start_time = rospy.Time.now()
 
                     # STEP 3: 종료 -> lane_driving 복귀
                     elif self.lc_step == 5:
                         with self.lock:
-                            self._exit_lane_change_to_lane_driving(set_wait_for_traffic=False)
+                            self.state = "crossline"
 
+
+                if self.state == "crossline":
+                    if self.crossline == 1: #횡단보도 정지. 
+                        self.drive(lane_steer, self.SPEED_0)
+                        self.traffic_queue.clear()
+                        self.state = "traffic"
+                    else:
+                        self.drive(lane_steer, self.SPEED_MID)
+                
                 # traffic
                 if self.state == "traffic":
                     with self.lock:
-                        red_count = sum(1 for v in self.traffic_queue if v == 1)
+                        green_count = sum(1 for v in self.traffic_queue if v == 1)
+                        if green_count >= self.traffic_green_threshold:
+                            self.state = "lane_driving"
+                        else:
+                            self.drive(lane_steer, self.SPEED_0)
 
-                    if red_count >= self.traffic_red_threshold:
-                        self.drive(lane_steer, self.SPEED_0)
-                    else:
-                        self.drive(lane_steer, self.SPEED_MID)
+
 
             # ---- publish status for viz (EVERY LOOP) ----
             # NOTE: crash bool은 "현재 상태"를 그대로 publish.
