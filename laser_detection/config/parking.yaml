@@ -6,12 +6,12 @@ vehicle:
 
 timing:
   pause: 0.5
-  parking_pause: 2.0
+  parking_pause: 2.5
   going_right: 2.5
 
 threshold:
   can_park: -2.0
-  ultrasonic: 500
+  ultrasonic: 1000
   track_max_dist: 0.5
 
 roi:

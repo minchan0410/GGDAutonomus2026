@@ -17,10 +17,10 @@ class Parking:
         rospy.init_node("parking")
         self.load_params()
         
-        # rospy.Subscriber("/ultrasonic2", Int16, self.ultrasonic2_callback, queue_size=1)
-        # rospy.Subscriber("/ultrasonic3", Int16, self.ultrasonic3_callback, queue_size=1)
-        # rospy.Subscriber("/ultrasonic4", Int16, self.ultrasonic4_callback, queue_size=1)
-        # rospy.Subscriber("/ultrasonic5", Int16, self.ultrasonic5_callback, queue_size=1)
+        rospy.Subscriber("/ultrasonic2", Int16, self.ultrasonic2_callback, queue_size=1)
+        rospy.Subscriber("/ultrasonic3", Int16, self.ultrasonic3_callback, queue_size=1)
+        rospy.Subscriber("/ultrasonic4", Int16, self.ultrasonic4_callback, queue_size=1)
+        rospy.Subscriber("/ultrasonic5", Int16, self.ultrasonic5_callback, queue_size=1)
         rospy.Subscriber("/detection_poses",PoseArray,self.detection_poses_callback,queue_size=1)
         rospy.Subscriber("/parking_lane_steer", Int16, self.lane_steer_callback, queue_size=1)
         rospy.Subscriber("/parking_stanley_steer", Int16, self.stanley_steer_callback, queue_size=1)
@@ -33,7 +33,7 @@ class Parking:
         self.roi_marker_pub = rospy.Publisher("/roi_marker",Marker,queue_size=1)
         self.debug_text_pub = rospy.Publisher("/debug_overlay_text", OverlayText, queue_size=1, latch=True)
         
-        self.ultrasonics = [10000, 10000, 10000, 10000]
+        self.ultrasonics = [20000, 20000, 20000, 20000]
         self.rate = rospy.Rate(20)
         
         # ========================================
@@ -258,13 +258,13 @@ class Parking:
     
     def stanley_steer_callback(self, msg): self.stanley_steer = msg.data
         
-    # def ultrasonic2_callback(self, msg): self.ultrasonics[0] = msg.data
+    def ultrasonic2_callback(self, msg): self.ultrasonics[0] = msg.data
     
-    # def ultrasonic3_callback(self, msg): self.ultrasonics[1] = msg.data
+    def ultrasonic3_callback(self, msg): self.ultrasonics[1] = msg.data
     
-    # def ultrasonic4_callback(self, msg): self.ultrasonics[2] = msg.data
+    def ultrasonic4_callback(self, msg): self.ultrasonics[2] = msg.data
     
-    # def ultrasonic5_callback(self, msg): self.ultrasonics[3] = msg.data
+    def ultrasonic5_callback(self, msg): self.ultrasonics[3] = msg.data
 
     def detection_poses_callback(self, msg):
             
