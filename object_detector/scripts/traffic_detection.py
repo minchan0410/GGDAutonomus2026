@@ -9,6 +9,7 @@ from sensor_msgs.msg import Image
 from std_msgs.msg import Int16
 from cv_bridge import CvBridge
 from ultralytics import YOLO
+from collections import deque, Counter  # [추가] 큐와 최빈값 계산을 위한 모듈
 
 # ==========================================
 # 출력 상태 상수
@@ -28,6 +29,11 @@ class TrafficDetectionNode:
         self.state_topic = rospy.get_param("~state_topic", "/traffic")
         self.use_overlay = bool(rospy.get_param("~overlay_enable", True))
         self.overlay_topic = rospy.get_param("~overlay_topic", "/traffic_overlay/image")
+
+        # [추가] 결과 스무딩을 위한 큐 설정
+        # 큐의 길이가 길수록 안정적이지만 반응 속도가 느려집니다. (예: 30fps 기준 10~15 추천)
+        self.queue_len = int(rospy.get_param("~queue_len", 10))
+        self.result_queue = deque(maxlen=self.queue_len)
 
         # 2. YOLO 파라미터 & 클래스 ID
         self.weights = rospy.get_param("~weights", "")
@@ -87,12 +93,8 @@ class TrafficDetectionNode:
     def is_in_roi(self, box, roi_rect):
         """
         박스 중심이 ROI 픽셀 영역 안에 있는지 확인
-        box: [x1, y1, x2, y2]
-        roi_rect: (rx, ry, rw, rh)
         """
         rx, ry, rw, rh = roi_rect
-        
-        # ROI 폭이나 높이가 0이면 전체 화면 모드로 간주 (무조건 포함)
         if rw <= 0 or rh <= 0: 
             return True
 
@@ -100,7 +102,6 @@ class TrafficDetectionNode:
         cx = (x1 + x2) / 2
         cy = (y1 + y2) / 2
 
-        # 중심점이 ROI 사각형 안에 있는지 체크
         if (rx <= cx <= rx + rw) and (ry <= cy <= ry + rh):
             return True
         return False
@@ -113,25 +114,21 @@ class TrafficDetectionNode:
             return
 
         img_h, img_w = frame.shape[:2]
-        # ROI 영역 계산 (필터링용)
         current_roi_rect = self.get_roi_pixel_rect(img_w, img_h)
 
-        # [변경됨] 전체 이미지에 대해 추론 수행
-        # verbose=False, half=True (GPU FP16)
+        # YOLO 추론
         results = self.model.predict(frame, conf=self.conf_th, verbose=False, half=True)
         
-        vote_counts = {STATE_RED: 0, STATE_YELLOW: 0, STATE_GREEN: 0}
+        # [현재 프레임]에서의 투표 결과 (박스가 여러 개일 수 있으므로)
+        frame_vote_counts = {STATE_RED: 0, STATE_YELLOW: 0, STATE_GREEN: 0}
         detected_boxes = []
 
         if results:
             for box in results[0].boxes:
-                # 전체 이미지 기준 좌표
                 xyxy = box.xyxy[0].cpu().numpy()
                 cls  = int(box.cls[0].cpu().numpy())
                 conf = float(box.conf[0].cpu().numpy())
 
-                # [중요] 여기서 ROI 필터링 수행
-                # 검출된 박스가 ROI 안에 없으면 무시
                 if not self.is_in_roi(xyxy, current_roi_rect):
                     continue
 
@@ -141,41 +138,51 @@ class TrafficDetectionNode:
                 elif cls == self.cls_id_green:  target_state = STATE_GREEN
                 
                 if target_state != STATE_NONE:
-                    vote_counts[target_state] += 1
+                    frame_vote_counts[target_state] += 1
                     detected_boxes.append((xyxy, target_state, conf))
 
-        # 3. 최빈값 결정
-        final_state = STATE_NONE
+        # 1. 현재 프레임의 대표 상태 결정
+        frame_result = STATE_NONE
         max_count = 0
         for state in [STATE_RED, STATE_YELLOW, STATE_GREEN]:
-            if vote_counts[state] > max_count:
-                max_count = vote_counts[state]
-                final_state = state
+            if frame_vote_counts[state] > max_count:
+                max_count = frame_vote_counts[state]
+                frame_result = state
+        
+        # [수정됨] 2. 결과 큐(History)에 현재 프레임 결과 추가
+        # STATE_NONE이라도 큐에 추가하여 신호가 사라진 상태를 반영해야 함
+        self.result_queue.append(frame_result)
 
-        # 4. 발행
-        self.pub_state.publish(Int16(final_state))
+        # [수정됨] 3. 큐 전체에서 최빈값(Majority Vote) 결정
+        # Counter.most_common(1)은 [(값, 빈도수)] 형태 리스트 반환
+        if len(self.result_queue) > 0:
+            most_common = Counter(self.result_queue).most_common(1)
+            final_smoothed_state = most_common[0][0]
+        else:
+            final_smoothed_state = STATE_NONE
 
-        # 5. 오버레이
+        # 4. 발행 (스무딩된 결과 발행)
+        self.pub_state.publish(Int16(final_smoothed_state))
+
+        # 5. 오버레이 (박스는 현재 프레임 기준, 결과 텍스트는 스무딩된 기준)
         if self.use_overlay:
-            self.publish_overlay(frame, detected_boxes, final_state, current_roi_rect, msg.header)
+            self.publish_overlay(frame, detected_boxes, final_smoothed_state, current_roi_rect, msg.header)
 
     def publish_overlay(self, frame, boxes, final_state, roi_rect, header):
         display = frame.copy()
         rx, ry, rw, rh = roi_rect
         img_h, img_w = display.shape[:2]
 
-        # ROI 그리기 (전체 화면 설정이 아닐 때만)
         if rw < img_w or rh < img_h:
             cv2.rectangle(display, (rx, ry), (rx + rw, ry + rh), (255, 0, 255), 2)
             cv2.putText(display, "ROI Filter", (rx, ry - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 255), 2)
 
-        # 박스 및 결과 그리기
         colors = {
             STATE_RED:    (0, 0, 255),
             STATE_GREEN:  (0, 255, 0),
             STATE_YELLOW: (0, 255, 255)
         }
-        label_map = {STATE_RED:"RED", STATE_YELLOW:"YELLOW", STATE_GREEN:"GREEN"}
+        label_map = {STATE_RED:"RED", STATE_GREEN:"GREEN", STATE_YELLOW:"YELLOW"}
 
         for (xyxy, state, conf) in boxes:
             x1, y1, x2, y2 = map(int, xyxy)
@@ -185,10 +192,14 @@ class TrafficDetectionNode:
             label = f"{label_map.get(state)} {conf:.2f}"
             cv2.putText(display, label, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
 
-        # 결과 텍스트
-        status_text = ["NONE", "GREEN", "YELLOW", "RED"]
+        status_text = ["NONE", "GREEN", "RED", "YELLOW"]
         result_str = f"RESULT: {status_text[final_state]}"
         
+        # 큐 상태 표시 (디버깅용 - 선택 사항)
+        # 예: Q[N N R R R R] 형태
+        # debug_q_str = f"Q Len:{len(self.result_queue)}"
+        # cv2.putText(display, debug_q_str, (15, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+
         cv2.putText(display, result_str, (15, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 0), 4)
         cv2.putText(display, result_str, (15, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
 

@@ -27,15 +27,14 @@ class LaneDetector:
         self.bottom_shrink_ratio = rospy.get_param("~bottom_shrink_ratio", 0.68)
         self.dbscan_eps = rospy.get_param("~dbscan_eps", 15)
         
-        # ==========================================
+        # [추가] 최소 선 검출 개수 설정 (이 값보다 적으면 조향각 0)
+        self.min_line_count = int(rospy.get_param("~min_line_count", 15))
+        
         # [추가] ROI 설정 (BEV 이미지 기준 비율 0.0 ~ 1.0)
-        # ==========================================
-        # 예: x=0.0, y=0.0, w=1.0, h=1.0 이면 전체 화면 사용
-        # 예: x=0.2, y=0.4, w=0.6, h=0.6 이면 중앙 하단부 집중
         self.roi_x_ratio = rospy.get_param("~roi_x_ratio", 0.0)
         self.roi_y_ratio = rospy.get_param("~roi_y_ratio", 0.0) 
         self.roi_w_ratio = rospy.get_param("~roi_w_ratio", 0.5)
-        self.roi_h_ratio = rospy.get_param("~roi_h_ratio", 0.5)
+        self.roi_h_ratio = rospy.get_param("~roi_h_ratio", 1)
 
         self.cluster_colors = [(0, 0, 255), (0, 255, 0), (255, 0, 0), (0, 255, 255), (255, 0, 255)]
         self.bridge = CvBridge()
@@ -108,33 +107,28 @@ class LaneDetector:
         bev_viz = bev_img.copy()
 
         # ---------------------------------------------------------
-        # [추가] 2. ROI 계산 및 Crop
+        # 2. ROI 계산 및 Crop
         # ---------------------------------------------------------
-        # BEV 이미지 상에서의 ROI 좌표 계산
         roi_x = int(bev_w * self.roi_x_ratio)
         roi_y = int(bev_h * self.roi_y_ratio)
         roi_w = int(bev_w * self.roi_w_ratio)
         roi_h = int(bev_h * self.roi_h_ratio)
 
-        # 예외 처리: 이미지 범위를 벗어나지 않도록 클램핑
         roi_x = max(0, roi_x)
         roi_y = max(0, roi_y)
         roi_w = min(bev_w - roi_x, roi_w)
         roi_h = min(bev_h - roi_y, roi_h)
 
-        # ROI 영역 시각화 (파란색 박스)
         cv2.rectangle(bev_viz, (roi_x, roi_y), (roi_x + roi_w, roi_y + roi_h), (255, 0, 0), 2)
         cv2.putText(bev_viz, "ROI Area", (roi_x + 5, roi_y + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
 
-        # 실제 알고리즘에 들어갈 이미지 Crop
-        # (ROI 영역만 잘라내어 처리 속도를 높이고 노이즈를 줄임)
         if roi_w > 0 and roi_h > 0:
             processing_img = bev_img[roi_y:roi_y+roi_h, roi_x:roi_x+roi_w]
         else:
-            processing_img = bev_img # 설정 오류 시 전체 사용
+            processing_img = bev_img
 
         # ---------------------------------------------------------
-        # 3. 이미지 처리 (엣지 검출 - ROI 내부에서 수행)
+        # 3. 이미지 처리 (엣지 검출)
         # ---------------------------------------------------------
         gray = cv2.cvtColor(processing_img, cv2.COLOR_BGR2GRAY)
         blur = cv2.GaussianBlur(gray, (3, 3), 5)
@@ -145,12 +139,9 @@ class LaneDetector:
         edges = cv2.bitwise_and(edges, edges, mask=mask)
         edges = cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=3)
         
-        lines = cv2.HoughLinesP(edges, 1, np.pi/180, 40, minLineLength=30, maxLineGap=20)
+        lines = cv2.HoughLinesP(edges, 1, np.pi/180, 40, minLineLength=70, maxLineGap=20)
         
-        # 결과 표시를 위해 Crop된 엣지 이미지를 컬러로 변환
         edges_color_roi = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
-        
-        # 전체 화면(edges_color)을 검은색으로 만들고 ROI 부분만 붙여넣음 (시각화용)
         edges_color = np.zeros_like(bev_img)
         if roi_w > 0 and roi_h > 0:
             edges_color[roi_y:roi_y+roi_h, roi_x:roi_x+roi_w] = edges_color_roi
@@ -163,21 +154,18 @@ class LaneDetector:
         if lines is not None:
             data_angles = []
             valid_indices = []
-            
-            # [중요] 검출된 라인은 Crop 이미지 기준 좌표이므로
-            # 원본 BEV 좌표계로 복원(Offset)해주어야 함.
             global_lines = [] 
 
             for i, line in enumerate(lines):
                 lx1, ly1, lx2, ly2 = line[0]
                 
-                # 좌표 복원: ROI 시작점(roi_x, roi_y) 더하기
+                # 좌표 복원
                 gx1, gy1 = lx1 + roi_x, ly1 + roi_y
                 gx2, gy2 = lx2 + roi_x, ly2 + roi_y
                 
                 if gy1 > gy2: gx1, gy1, gx2, gy2 = gx2, gy2, gx1, gy1
                 
-                global_lines.append([gx1, gy1, gx2, gy2]) # 저장해둠
+                global_lines.append([gx1, gy1, gx2, gy2]) 
 
                 dx = gx1 - gx2
                 dy = gy2 - gy1 
@@ -206,7 +194,6 @@ class LaneDetector:
                     rank_map = {lbl: idx for idx, lbl in enumerate(sorted_labels)}
 
                     for idx, label in enumerate(labels):
-                        # 저장해둔 글로벌 좌표 가져오기
                         gx1, gy1, gx2, gy2 = global_lines[valid_indices[idx]]
                         angle = data_angles[idx]
 
@@ -217,7 +204,6 @@ class LaneDetector:
                             color = self.cluster_colors[rank % len(self.cluster_colors)]
                             thickness = 3 if rank == 0 else 1
                             
-                            # 시각화 (edges_color에도 그림)
                             cv2.line(edges_color, (gx1, gy1), (gx2, gy2), color, 2)
                             cv2.line(bev_viz, (gx1, gy1), (gx2, gy2), color, thickness)
                             
@@ -226,11 +212,48 @@ class LaneDetector:
                                 largest_cluster_data.append((angle, mid_y))
 
         # ---------------------------------------------------------
-        # 5. 결과 발행 및 시각화
+        # 5. 결과 발행 및 시각화 (개수 표시 추가)
         # ---------------------------------------------------------
-        weighted_avg_angle = self.calculate_weighted_average_angle(largest_cluster_data)
-        current_avg_angle = weighted_avg_angle if weighted_avg_angle is not None else 0.0
+        detected_count = len(largest_cluster_data)
+        
+        # [조건 체크] 감지된 선의 개수가 기준값 미만인가?
+        is_lines_enough = (detected_count >= self.min_line_count)
 
+        if not is_lines_enough:
+            # 조건 불만족 -> Steer 0
+            current_avg_angle = 0.0
+            rospy.logdebug(f"Not enough lines detected: {detected_count}/{self.min_line_count}")
+            
+            # 시각화 설정 (빨간색)
+            info_color = (0, 0, 255)
+            status_text = "Mode: FORCE ZERO"
+            arrow_color = (150, 150, 150) # 화살표 회색 처리
+        else:
+            # 조건 만족 -> 정상 계산
+            weighted_avg_angle = self.calculate_weighted_average_angle(largest_cluster_data)
+            current_avg_angle = weighted_avg_angle if weighted_avg_angle is not None else 0.0
+            
+            # 시각화 설정 (초록색/노란색)
+            info_color = (0, 255, 0)
+            status_text = "Mode: ACTIVE"
+            arrow_color = (0, 255, 255)
+
+        # ---------------------------
+        # 정보 텍스트 그리기 (좌측 상단)
+        # ---------------------------
+        # 1. 감지된 개수 / 최소 기준
+        count_text = f"Lines: {detected_count} (Min: {self.min_line_count})"
+        cv2.putText(bev_viz, count_text, (10, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.7, info_color, 2)
+        
+        # 2. 현재 모드 (ACTIVE vs FORCE ZERO)
+        cv2.putText(bev_viz, status_text, (10, 110), cv2.FONT_HERSHEY_SIMPLEX, 0.7, info_color, 2)
+
+        # 3. 조향각 값
+        cv2.putText(bev_viz, f"Avg Angle: {int(current_avg_angle)}", (10, 50), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, arrow_color, 2)
+
+
+        # 토픽 발행
         angle_msg = Int16()
         angle_msg.data = - int(current_avg_angle * 0.7)
         self.angle_pub.publish(angle_msg)
@@ -242,11 +265,9 @@ class LaneDetector:
         arrow_end_x = int(arrow_start_pt[0] + arrow_len * math.sin(angle_rad))
         arrow_end_y = int(arrow_start_pt[1] - arrow_len * math.cos(angle_rad))
         
-        cv2.arrowedLine(edges_color, arrow_start_pt, (arrow_end_x, arrow_end_y), (0, 255, 255), 3, tipLength=0.3)
-        cv2.arrowedLine(bev_viz, arrow_start_pt, (arrow_end_x, arrow_end_y), (0, 255, 255), 3, tipLength=0.3)
-        cv2.putText(bev_viz, f"Avg Angle: {int(current_avg_angle)}", (10, 50), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
-
+        cv2.arrowedLine(edges_color, arrow_start_pt, (arrow_end_x, arrow_end_y), arrow_color, 3, tipLength=0.3)
+        cv2.arrowedLine(bev_viz, arrow_start_pt, (arrow_end_x, arrow_end_y), arrow_color, 3, tipLength=0.3)
+        
         combined_result = cv2.hconcat([edges_color, bev_viz])
         
         if combined_result.shape[1] > 1920 or combined_result.shape[0] > 1080:

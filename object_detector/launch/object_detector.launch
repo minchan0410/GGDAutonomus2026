@@ -6,9 +6,9 @@
   <node pkg="object_detector" type="object_projection.py" name="object_projection" output="screen">
     <rosparam file="$(find object_detector)/config/object_projection.yaml" command="load"/>
   </node> 
-<!--
+
   <node pkg="object_detector" type="traffic_detection.py" name="traffic_detection" output="screen" >
     <rosparam command="load" file="$(find object_detector)/config/traffic_detection.yaml"/>
   </node>
--->
+
 </launch>

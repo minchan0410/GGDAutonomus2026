@@ -1,13 +1,14 @@
 # ---- input/output topics ----
+# image_topic: "/usb_cam/image_raw"
 image_topic: "/cam2/usb_cam/image_raw"
 state_topic: "/traffic"
 
 # ---- yolo weights ----
 # 여기만 너가 찾은 .pt 절대경로로 바꿔서 넣어
-weights: "/home/vic/kkdws/src/object_detector/model/traffic26.onnx"
+weights: "/home/vic/kkdws/src/object_detector/model/traffic26.pt"
 
 # ---- inference params ----
-conf_th: 0.4
+conf_th: 0.5
 
 # class id
 class_id_green: 0
