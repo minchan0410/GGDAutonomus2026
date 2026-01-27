@@ -1,6 +1,6 @@
 # **2026 경기도 대학생 자율주행 경진대회**
 <div align="center">
-  <img src="./asset/poster.jpg" alt="poster" width="600">
+  <img src="./assets/poster.jpg" alt="poster" width="600">
 </div>
 
 ### Team   : **AJOU NICE**
@@ -20,14 +20,14 @@
 ## **Hardware Info** 
 
 <div align="center">
-  <img src="./asset/hardwareinfo.png" alt="poster" width="600">
+  <img src="./assets/hardwareinfo.png" alt="poster" width="600">
 </div>
 
 <br>
 
 ## **System Structure**
 <div align="center">
-  <img src="./asset/system.png" alt="poster" width="600">
+  <img src="./assets/system.png" alt="poster" width="600">
 </div>
 
 <br>
