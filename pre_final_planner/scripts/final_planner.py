@@ -38,6 +38,7 @@ class FinalPlanner:
         rospy.Subscriber("/cur_lane", Int16, self.cur_lane_callback, queue_size=1)
         rospy.Subscriber("/car_projected", PointStamped, self.car_projected_callback, queue_size=1)
         rospy.Subscriber("/traffic", Int16, self.traffic_callback, queue_size=1)
+        rospy.Subscriber("/crossline", Int16, self.crossline_callback, queue_size=1)
 
         # ---- pubs (actuation) ----
         self.motor_cmd_steer_pub = rospy.Publisher("/des_steer", Int16, queue_size=1)
@@ -108,6 +109,8 @@ class FinalPlanner:
         self.traffic_light = 0
         self.traffic_queue = deque(maxlen=self.queues_maxlen)
 
+        self.crossline = False
+
         self.run()
 
     # ---------------- callbacks ----------------
@@ -152,6 +155,14 @@ class FinalPlanner:
             self.traffic_light = val
             if val in (1, 3):
                 self.traffic_queue.append(val)
+    
+    def crossline_callback(self, msg: Int16):
+        val = int(msg.data)
+        with self.lock:
+            if val == 1:
+                self.crossline = True
+            else:
+                self.crossline = False
 
     # ---------------- keyboard ----------------
     def keyboard_listener(self):
