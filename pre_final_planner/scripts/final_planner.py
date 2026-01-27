@@ -81,6 +81,7 @@ class FinalPlanner:
         self.ultrasonic_count_threshold = rospy.get_param("~ultrasonic_count_threshold", 7)
 
         self.traffic_green_threshold = rospy.get_param("~traffic_green_threshold", 5)
+        self.traffic_green_timeout = rospy.get_param("~traffic_green_timeout", 20.0)
 
         # ---- state ----
         self.mode = "DEFAULT"
@@ -107,6 +108,7 @@ class FinalPlanner:
 
         self.traffic_light = 0
         self.traffic_queue = deque(maxlen=self.queues_maxlen)
+        self.traffic_start_time = None
 
         self.crossline = False
         self.traffic_stop = False
@@ -231,16 +233,14 @@ class FinalPlanner:
             elif mode == "FINAL":
                 # lane driving
                 if self.state == "lane_driving":
-                    
-                            self.lane_change_reason = "none"
-                        # publish는 아래에서 공통으로 한 번에 함
-                    else:
-                        self.drive(lane_steer, self.SPEED_HIGH)
+                    self.lane_change_reason = "none"
+                    # publish는 아래에서 공통으로 한 번에 함
+                    self.drive(lane_steer, self.SPEED_HIGH)
 
-                        # crash triggers -> lane change
-                        if self.ultrasonic_crash or self.yolo_crash:
-                            with self.lock:
-                                self._enter_lane_change("lane_change")
+                    # crash triggers -> lane change
+                    if self.ultrasonic_crash or self.yolo_crash:
+                        with self.lock:
+                            self._enter_lane_change("lane_change")
 
                 # lane change
                 if self.state == "lane_change":
@@ -289,12 +289,14 @@ class FinalPlanner:
                     elif self.lc_step == 5:
                         with self.lock:
                             self.state = "crossline"
+                            self.lc_start_time = None
 
 
                 if self.state == "crossline":
                     if self.crossline == 1: #횡단보도 정지. 
                         self.drive(lane_steer, self.SPEED_0)
                         self.traffic_queue.clear()
+                        self.traffic_start_time = rospy.Time.now()
                         self.state = "traffic"
                     else:
                         self.drive(lane_steer, self.SPEED_MID)
@@ -302,9 +304,13 @@ class FinalPlanner:
                 # traffic
                 if self.state == "traffic":
                     with self.lock:
+                        if self.traffic_start_time is None:
+                            self.traffic_start_time = rospy.Time.now()
+                        traffic_elapsed = (rospy.Time.now() - self.traffic_start_time).to_sec()
                         green_count = sum(1 for v in self.traffic_queue if v == 1)
-                        if green_count >= self.traffic_green_threshold:
+                        if (green_count >= self.traffic_green_threshold) or (traffic_elapsed >= self.traffic_green_timeout):
                             self.state = "lane_driving"
+                            self.traffic_start_time = None
                         else:
                             self.drive(lane_steer, self.SPEED_0)
 
