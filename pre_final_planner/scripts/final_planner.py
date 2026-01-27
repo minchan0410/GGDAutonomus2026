@@ -90,6 +90,7 @@ class FinalPlanner:
         self.state = "lane_driving"
         self.last_state = None
 
+        self.crossline = 0 # not crossline
         # lane-change reason latch (for viz)
         # "none" | "yolo" | "sonic" | "both"
         self.lane_change_reason = "none"
@@ -124,6 +125,9 @@ class FinalPlanner:
                 count_over = sum(1 for v in self.ultrasonic_queue if v <= self.ultrasonic_threshold)
                 self.ultrasonic_crash = count_over >= self.ultrasonic_count_threshold
 
+    def crossline_callback(self, msg: Int16):
+        self.crossline = msg.data
+    
     def car_projected_callback(self, msg: PointStamped):
         # ✅ FIX: init 중 콜백이 먼저 들어오면 yolo_queue가 아직 없을 수 있음
         if not hasattr(self, "yolo_queue"):

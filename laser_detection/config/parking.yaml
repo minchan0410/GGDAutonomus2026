@@ -1,0 +1,33 @@
+vehicle:
+  full_left_steer: 22.5
+  full_right_steer: -22.5
+  forward_speed: 125
+  backward_speed: -100
+
+timing:
+  pause: 0.5
+  parking_pause: 2.0
+  going_right: 2.5
+
+threshold:
+  can_park: -2.0
+  ultrasonic: 500
+  track_max_dist: 0.5
+
+roi:
+  lane:
+    x_min: -1.0
+    x_max:  1.0
+    y_min: -3.0
+    y_max: -1.0
+
+  full_left:
+    r_min: 0.3
+    r_max: 3.0
+    angle_deg: 90   # -90 ~ +90
+
+stanley_path:
+  back_len: 2.0
+  front_len: 5.0
+  step: 0.1
+  frame_id: "laser"

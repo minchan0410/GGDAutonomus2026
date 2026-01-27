@@ -2,33 +2,21 @@
 
 import rospy, math
 import numpy as np
-from std_msgs.msg import Int16
+from std_msgs.msg import Int16, ColorRGBA
 from geometry_msgs.msg import PoseArray
 from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped, Point
 from visualization_msgs.msg import Marker
+from jsk_rviz_plugins.msg import OverlayText
 from tf.transformations import quaternion_from_euler
 import threading
 
-L = 0.8 # 휠베이스
-K = 20
-TH_MAX               = 1
-CAN_PARK_TH          = -2
-FORWARD_SPEED        = 125
-BACKWARD_SPEED       = -100
-PAUSE_TIME           = 0.5
-PARKING_PAUSE_TIME   = 2
-GOING_LEFT_TIME      = 1.5
-GOING_RIGHT_TIME     = 2.5
-GOING_STRAIGHT_TIME  = 3
-ULTRASONIC_THRESHOLD = 500  # 50cm
-FULL_LEFT_STEER      = 22.5
-FULL_RIGHT_STEER     = -22.5
 
 class Parking:
     def __init__(self):
         rospy.init_node("parking")
-
+        self.load_params()
+        
         # rospy.Subscriber("/ultrasonic2", Int16, self.ultrasonic2_callback, queue_size=1)
         # rospy.Subscriber("/ultrasonic3", Int16, self.ultrasonic3_callback, queue_size=1)
         # rospy.Subscriber("/ultrasonic4", Int16, self.ultrasonic4_callback, queue_size=1)
@@ -43,6 +31,7 @@ class Parking:
         self.dest_marker_pub = rospy.Publisher("/parking_destination_marker",Marker,queue_size=1)
         self.filtered_points_marker_pub = rospy.Publisher("/filtered_points_marker",Marker,queue_size=1)
         self.roi_marker_pub = rospy.Publisher("/roi_marker",Marker,queue_size=1)
+        self.debug_text_pub = rospy.Publisher("/debug_overlay_text", OverlayText, queue_size=1, latch=True)
         
         self.ultrasonics = [10000, 10000, 10000, 10000]
         self.rate = rospy.Rate(20)
@@ -84,7 +73,6 @@ class Parking:
         self.steer_source   = "NONE"  # LANE / STANLEY / CONST
         self.state          = None
         self.prev_state     = None
-        self.prev_roi_state = None
         self.can_park_TH    = None
         # ========================================
         
@@ -106,130 +94,14 @@ class Parking:
         # ========================================
         
         
-        # ========================================
-        # ------------------debugging-------------
-        # self.debugging    = True   # TODO
-        self.debugging = False   # TODO
-        # self.debug_mode   = "step1"
-        self.debug_mode   = "step2"
-        # self.debug_mode   = "step3"
-        # ========================================
-        
-        # ====================================================================================================
-        # ------------------------------------------debugging-------------------------------------------------
-        if self.debugging:
-            
-            if self.debug_mode == "step1":
-                
-                self.state = "lane_driving"
-                rospy.logwarn_once("STANLEY DEBUG MODE ENABLED")
-                rospy.loginfo_throttle(0.5,f"state: {self.state}",
-                      f"parking points: {self.filtered_points}",
-                      f"can_start_parking: {self.can_start_parking}"
-                      )
-                
-                while not rospy.is_shutdown():
-                    if not self.first_car_detected:
-                        self.drive(self.lane_steer, FORWARD_SPEED)
-                        
-                    else:
-                        self.state = "full_left_steer"
-                        continue
-
-                    if self.state == "full_left_steer":              # 주차 공간 발견 후 왼쪽으로 살짝 꺾어서 각 만드는 단계
-                        if not self.can_start_parking:
-                            self.drive(FULL_LEFT_STEER, FORWARD_SPEED)
-                            
-                        else:
-                            self.state = "pause_after_left"
-                            self.start_time = rospy.Time.now()
-                            continue
-
-                    if self.state == "pause_after_left":
-                        elapsed = (rospy.Time.now() - self.start_time).to_sec()
-                        self.drive(0, 0)
-                        
-                        if elapsed >= PAUSE_TIME:
-                            self.start_time = None
-                            self.state = "stanley"
-                            continue
-                        
-                    self.rate.sleep()
-                    
-                    
-            if self.debug_mode == "step2":
-                
-                self.state = "stanley"
-                rospy.logwarn_once("STANLEY DEBUG MODE ENABLED")
-                print(f"state: {self.state}",
-                      f"parking points: {self.filtered_points}",
-                      f"parked: {self.parked}",
-                      )
-                
-                while not rospy.is_shutdown():
-                    
-                    if not self.parked:
-                        self.drive(self.stanley_steer, BACKWARD_SPEED)
-                        self.sonic_check()
-                    else:
-                        self.state = "stop"
-                        self.start_time = rospy.Time.now()
-                        continue
-            
-                    if self.state == "stop":
-                        elapsed = (rospy.Time.now() - self.start_time).to_sec()
-                        self.drive(0, 0)
-                        if elapsed >= PARKING_PAUSE_TIME:
-                            self.start_time = None
-                            self.state = "pull_out"
-                            continue
-                    
-                    self.rate.sleep()
-            
-            
-            if self.debug_mode == "step3":
-                
-                self.state = "pull_out"
-                rospy.logwarn_once("PULL OUT DEBUG MODE ENABLED")
-                print(f"state: {self.state}",
-                      f"parking points: {self.filtered_points}",
-                      f"pulled_out: {self.pulled_out}",
-                      )
-                
-                while not rospy.is_shutdown():
-                    
-                    if not self.pulled_out:
-                        self.drive(0.0, FORWARD_SPEED)
-                        self.sonic_check()
-                    else:
-                        if self.start_time is None:
-                            self.start_time = rospy.Time.now()
-
-                        elapsed = (rospy.Time.now() - self.start_time).to_sec()
-                        if elapsed < GOING_RIGHT_TIME:
-                            self.drive(FULL_RIGHT_STEER, FORWARD_SPEED)
-                        else:
-                            self.start_time = None
-                            self.state = "finishing"
-                            continue
-                        
-                if self.state == "finishing":
-                    self.drive(self.lane_steer, FORWARD_SPEED)
-                    
-                    self.rate.sleep()
-        # ====================================================================================================
-        
-        
         # ====================================================================================================
         # ------------------------------------------main loop-------------------------------------------------
-        else:
-            self.run()
+        self.run()
         # ====================================================================================================
         
     def run(self):
         
         while not rospy.is_shutdown():
-            rospy.loginfo_throttle(0.5, f"state: {self.state}, filtered_points: {self.filtered_points}")
 
             if self.mode == "DEFAULT":
                 self.drive(0,0)
@@ -237,15 +109,14 @@ class Parking:
             elif self.mode == "FINAL":
                 if self.state == "lane_driving":             # 미션 시작해서 일직선으로 주행하는 단계
                     if not self.first_car_detected:
-                        self.drive(self.lane_steer, FORWARD_SPEED)
-                        print(f"&*$@^(*@^*&#)(@*&*)(#&@()$&()@&^$*@^)*&$#&@*()#&*)(@&$*()@&*($)&$) lane steer: {self.lane_steer}")
+                        self.drive(self.lane_steer, self.FORWARD_SPEED)
                     else:
                         self.state = "full_left_steer"
                         continue
 
                 if self.state == "full_left_steer":              # 주차 공간 발견 후 왼쪽으로 살짝 꺾어서 각 만드는 단계
                     if not self.can_start_parking:
-                        self.drive(FULL_LEFT_STEER, FORWARD_SPEED)
+                        self.drive(self.FULL_LEFT_STEER, self.FORWARD_SPEED)
                     else:
                         self.state = "pause_after_left"
                         self.start_time = rospy.Time.now()
@@ -254,52 +125,80 @@ class Parking:
                 if self.state == "pause_after_left":
                     elapsed = (rospy.Time.now() - self.start_time).to_sec()
                     self.drive(0, 0)
-                    if elapsed >= PAUSE_TIME:
+                    if elapsed >= self.PAUSE_TIME:
                         self.start_time = None
                         self.state = "stanley"
                         continue
                     
                 if self.state == "stanley":                 # 후진해서 주차하는 단계
                     if not self.parked:
-                        self.drive(self.stanley_steer, BACKWARD_SPEED)
+                        self.drive(self.stanley_steer, self.BACKWARD_SPEED)
                         self.sonic_check()
                     else:
                         self.state = "stop"
                         self.start_time = rospy.Time.now()
                         continue
             
-            
                 if self.state == "stop":
                     elapsed = (rospy.Time.now() - self.start_time).to_sec()
                     self.drive(0, 0)
-                    if elapsed >= PARKING_PAUSE_TIME:
+                    if elapsed >= self.PARKING_PAUSE_TIME:
                         self.start_time = None
                         self.state = "pull_out"
                         continue
-
-
+                    
                 if self.state == "pull_out":
                     if not self.pulled_out:
-                        self.drive(0.0, FORWARD_SPEED)
+                        self.drive(0.0, self.FORWARD_SPEED)
                         self.sonic_check()
                     else:
                         if self.start_time is None:
                             self.start_time = rospy.Time.now()
 
                         elapsed = (rospy.Time.now() - self.start_time).to_sec()
-                        if elapsed < GOING_RIGHT_TIME:
-                            self.drive(FULL_RIGHT_STEER, FORWARD_SPEED)
+                        if elapsed < self.GOING_RIGHT_TIME:
+                            self.drive(self.FULL_RIGHT_STEER, self.FORWARD_SPEED)
                         else:
                             self.start_time = None
                             self.state = "finishing"
                             continue
                         
                 if self.state == "finishing":
-                    self.drive(self.lane_steer, FORWARD_SPEED)
+                    self.drive(self.lane_steer, self.FORWARD_SPEED)
 
 
             self.rate.sleep()
-              
+    
+    def load_params(self):
+        # ---------------- vehicle ----------------
+        self.FULL_LEFT_STEER  = rospy.get_param("~vehicle/full_left_steer", 22.5)
+        self.FULL_RIGHT_STEER = rospy.get_param("~vehicle/full_right_steer", -22.5)
+        self.FORWARD_SPEED    = rospy.get_param("~vehicle/forward_speed", 125)
+        self.BACKWARD_SPEED   = rospy.get_param("~vehicle/backward_speed", -100)
+
+        # ---------------- timing ----------------
+        self.PAUSE_TIME          = rospy.get_param("~timing/pause", 0.5)
+        self.PARKING_PAUSE_TIME  = rospy.get_param("~timing/parking_pause", 2.0)
+        self.GOING_RIGHT_TIME    = rospy.get_param("~timing/going_right", 2.5)
+
+        # ---------------- threshold ----------------
+        self.CAN_PARK_TH = rospy.get_param("~threshold/can_park", -2.0)
+        self.ULTRASONIC_THRESHOLD = rospy.get_param("~threshold/ultrasonic", 500)
+        self.TRACK_MAX_DIST = rospy.get_param("~threshold/track_max_dist", 0.5)
+
+        # ---------------- roi ----------------
+        self.ROI_LANE = rospy.get_param("~roi/lane", {
+            "x_min": -1.0, "x_max": 1.0, "y_min": -3.0, "y_max": -1.0
+        })
+        self.ROI_FULL_LEFT = rospy.get_param("~roi/full_left", {
+            "r_min": 0.3, "r_max": 3.0, "angle_deg": 90
+        })
+
+        # ---------------- stanley path ----------------
+        self.SP = rospy.get_param("~stanley_path", {
+            "back_len": 2.0, "front_len": 5.0, "step": 0.1, "frame_id": "laser"
+        })
+
     def keyboard_listener(self):
         """
         d : DEFAULT (무조건 정지, state 저장)
@@ -369,36 +268,22 @@ class Parking:
 
     def detection_poses_callback(self, msg):
             
-        points = np.array(
-            [[pose.position.x, pose.position.y] for pose in msg.poses],
-            dtype=float
-        )
+        points = np.array([[pose.position.x, pose.position.y] for pose in msg.poses],dtype=float)
 
-        # -------------------------------
-        # (1) 항상 인지 로직은 돌린다
-        # -------------------------------
         self.first_updated = False
         self.second_updated = False
-        # 첫 번째 차 인지
+            
         if not self.first_car_detected:
             self.detect_first_car(points)
         else:
             self.first_updated  = self.track_first_car(points)
             
-        if self.state != self.prev_roi_state:
-            self.clear_roi_markers()
-            self.prev_roi_state = self.state
-            
-        # 두 번째 차 인지
         if self.first_car_detected and not self.second_car_detected:
             self.detect_second_car(points)
         elif self.second_car_detected:
             self.second_updated = self.track_second_car(points)
             
 
-        # -------------------------------
-        # (2) 두 차가 모두 잡혔으면 항상 추적
-        # -------------------------------
         if self.first_car_detected and self.second_car_detected:
             self.both_updated = self.first_updated and self.second_updated
 
@@ -408,30 +293,27 @@ class Parking:
                 )
         else:
             self.both_updated = False
-        # -------------------------------
-        # (3) FSM 단계별로 "사용만" 분기
-        # -------------------------------
+
+
         if self.state == "full_left_steer":
             if self.both_updated:
                 self.determine_can_parking(self.filtered_points)
 
         elif self.state in ["pause_after_left", "stanley"]:
+
             self.stanley_path(self.filtered_points)
 
         self.publish_debug_text()
             
-                
     def detect_first_car(self, point):
         
-        point = self.roi(point, "lane_driving")
+        point = self.roi_filter(point, "lane_driving")
         self.publish_lane_roi_filled()
         
         if point.shape[0] != 1:
-            rospy.loginfo_throttle(0.5,"not first car")
             self.first_car_streak = 0
             return
  
-        rospy.loginfo_throttle(0.5,"first car")
         self.first_car_streak += 1
 
         if self.first_car_streak >= 5:
@@ -440,18 +322,16 @@ class Parking:
             self.first_car = point
             rospy.loginfo_once("First car detected")
     
-    
     def detect_second_car(self, point):
         
-        point = self.roi(point, "full_left_steer")
+        point = self.roi_filter(point, "full_left_steer")
         center = self.first_car.reshape(2)
         self.publish_full_left_roi_filled(center)
+        
         if point.shape[0] != 1:
-            rospy.loginfo_throttle(0.5,"not second car")
             self.second_car_streak = 0
             return
         
-        rospy.loginfo_throttle(0.5,"second car")
         self.second_car_streak += 1
         
         if self.second_car_streak >= 5:
@@ -460,12 +340,12 @@ class Parking:
             self.second_car = point
             rospy.loginfo_once("Second car detected")
             
-
-    def track_first_car(self, point, max_dist=0.5):
+    def track_first_car(self, point):
         """
         point: np.ndarray (N, 2) - 현재 프레임의 후보 점들
         max_dist: float - 추적 허용 반경 (m)
         """
+        max_dist = self.TRACK_MAX_DIST
         if point is None or len(point) == 0:
             return False
 
@@ -488,15 +368,13 @@ class Parking:
             # 추적 실패
             rospy.logerr_once(f"!!!! first car update false !!! dist: {min_dist}")
             return False
-
-        
-        
-    def track_second_car(self, point, max_dist = 0.5):
+ 
+    def track_second_car(self, point):
         """
         point: np.ndarray (N, 2) - 현재 프레임의 후보 점들
         max_dist: float - 추적 허용 반경 (m)
         """
-
+        max_dist = self.TRACK_MAX_DIST
         if point is None or len(point) == 0:
             return False
 
@@ -520,53 +398,46 @@ class Parking:
             rospy.logerr_once(f"!!!! second car update false !!! dist: {min_dist}")
             return False
     
-    
     def determine_can_parking(self, points):
         self.can_park_TH = points[0, 1] + points[1, 1]
-        if self.can_park_TH > CAN_PARK_TH:
+        if self.can_park_TH > self.CAN_PARK_TH:
             self.can_start_parking = True
             rospy.loginfo_once("Parking lot detected")
-
+    
+    def roi_filter(self, point, state):
         
-    def roi(self, point, state, r_min=0.3, r_max=3):
-
         if point is None or len(point) == 0:
             return point
 
-        # state가 바뀔 때만 ROI clear
-
         if state == "lane_driving":
-
+            cfg = self.ROI_LANE
             mask = (
-                (point[:, 0] >= -1) & (point[:, 0] <= 1) &
-                (point[:, 1] >= -3) & (point[:, 1] <= -1)
+                (point[:, 0] >= cfg["x_min"]) & (point[:, 0] <= cfg["x_max"]) &
+                (point[:, 1] >= cfg["y_min"]) & (point[:, 1] <= cfg["y_max"])
             )
             return point[mask]
 
         elif state == "full_left_steer":
-
             if not self.first_car_detected:
                 return point
 
-            center = self.first_car.reshape(2)
+            cfg = self.ROI_FULL_LEFT
+            r_min = float(cfg["r_min"])
+            r_max = float(cfg["r_max"])
+            ang = math.radians(float(cfg["angle_deg"]))
 
+            center = self.first_car.reshape(2)
             dx = point[:, 0] - center[0]
             dy = point[:, 1] - center[1]
 
-            # (1) 거리 조건 (도넛)
             dist2 = dx**2 + dy**2
             dist_mask = (dist2 >= r_min**2) & (dist2 <= r_max**2)
 
-            # (2) 각도 조건 (laser 기준 -30 ~ +30 deg)
-            angles = np.arctan2(dy, dx)   # rad
-            angle_mask = (angles >= -math.radians(90)) & \
-                        (angles <=  math.radians(90))
+            angles = np.arctan2(dy, dx)
+            angle_mask = (angles >= -ang) & (angles <= ang)
 
-            # (3) 최종 ROI
-            mask = dist_mask & angle_mask
-            return point[mask]
-
-                
+            return point[dist_mask & angle_mask]
+            
     def drive(self, des_steer, long_cmd):
 
         # steer source 판별
@@ -580,12 +451,11 @@ class Parking:
         self.motor_cmd_steer_pub.publish(Int16(int(des_steer)))
         self.motor_long_pub.publish(Int16(int(long_cmd)))
     
-    
     def sonic_check(self):
         
         if self.state == "stanley":
             
-            if all(x < ULTRASONIC_THRESHOLD for x in self.ultrasonics):
+            if all(x < self.ULTRASONIC_THRESHOLD for x in self.ultrasonics):
                 self.parked_streak += 1
                 if self.parked_streak >= 5:
                     self.parked = True
@@ -595,25 +465,24 @@ class Parking:
         elif self.state == "pull_out":
             
             sonics_to_use = [self.ultrasonics[0], self.ultrasonics[2]]  # TODO
-            if all(x > ULTRASONIC_THRESHOLD + 1000 for x in sonics_to_use):
+            if all(x > self.ULTRASONIC_THRESHOLD + 1000 for x in sonics_to_use):
                 self.pulled_streak += 1
                 if self.pulled_streak >= 10:
                     self.pulled_out = True
             else:
                 self.pulled_streak = 0
-                
-                
+                       
     def stanley_path(self, filtered_points):
         
         if not self.both_updated:
             empty_path = Path()
             empty_path.header.stamp = rospy.Time.now()
-            empty_path.header.frame_id = "laser"
+            empty_path.header.frame_id = self.SP.get("frame_id", "laser")
             self.stanley_path_pub.publish(empty_path)
             self.clear_stanley_markers()
             rospy.logwarn_throttle(1.0, "stanley path invalid (not both updated)")
             return
-        
+
         dest = np.mean(filtered_points, axis=0)
         v = filtered_points[1] - filtered_points[0]
 
@@ -623,16 +492,17 @@ class Parking:
         if np.dot(n_hat, -dest) < 0:
             n_hat = -n_hat
 
-        back_len = 2.0    # 차량 반대 방향
-        front_len = 5.0   # 차량 쪽
-        step = 0.1
+        back_len  = float(self.SP.get("back_len", 2.0))
+        front_len = float(self.SP.get("front_len", 5.0))
+        step      = float(self.SP.get("step", 0.1))
+
         s_vals = np.arange(-back_len, front_len + step, step)
         path_xy = np.array([dest + s * n_hat for s in s_vals])
 
         path_msg = Path()
         path_msg.header.stamp = rospy.Time.now()
-        path_msg.header.frame_id = "laser" 
-        
+        path_msg.header.frame_id = self.SP.get("frame_id", "laser")
+            
         # 차량이 따라가야 할 진행 방향 (차량 → 목표)
         heading_dir = -n_hat
         yaw = math.atan2(heading_dir[1], heading_dir[0])
@@ -655,7 +525,6 @@ class Parking:
         self.publish_filtered_points_marker(filtered_points)
         self.publish_filtered_points_line(filtered_points)
         
-
     # ====================================================================================================
     # ------------------------------------------markers---------------------------------------------------
     def publish_destination_marker(self, dest):
@@ -716,7 +585,9 @@ class Parking:
         text.text = f"({dest[0]:+.2f}, {dest[1]:+.2f})"
 
         self.dest_marker_pub.publish(text)
-
+    # 빨간 구(SPHERE): 두 차량(클러스터) 중심의 평균점 dest = “주차 목표점/중앙점”
+    # 흰색 텍스트(TEXT_VIEW_FACING): 그 목표점의 좌표 (x, y)를 글자로 표시
+    
     def publish_filtered_points_marker(self, points):
         
         """
@@ -758,6 +629,7 @@ class Parking:
                 marker.points.append(p)
 
             self.filtered_points_marker_pub.publish(marker)
+    # 파란 원 테두리 2개(LINE_STRIP): points[0], points[1] 각각(첫 차/둘째 차로 추적 중인 포인트)을 원 형태로 강조 표시
     
     def publish_filtered_points_line(self, points):
         """
@@ -799,8 +671,22 @@ class Parking:
         marker.points.append(p1)
 
         self.filtered_points_marker_pub.publish(marker)
+    # 노란 선(LINE_LIST): points[0] ↔ points[1] 를 잇는 선분 = 두 차량 사이 방향/간격을 시각화 (이 벡터로 법선 잡아서 stanley path 만들지)
         
     def publish_lane_roi_filled(self):
+        cfg = self.ROI_LANE  # YAML에서 로드된 dict: x_min/x_max/y_min/y_max
+
+        x_min = float(cfg["x_min"])
+        x_max = float(cfg["x_max"])
+        y_min = float(cfg["y_min"])
+        y_max = float(cfg["y_max"])
+
+        # CUBE는 중심/크기 형태로 넣어야 하니까 YAML 범위를 center/scale로 변환
+        cx = (x_min + x_max) / 2.0
+        cy = (y_min + y_max) / 2.0
+        sx = (x_max - x_min)
+        sy = (y_max - y_min)
+
         marker = Marker()
         marker.header.frame_id = "laser"
         marker.header.stamp = rospy.Time.now()
@@ -810,25 +696,40 @@ class Parking:
         marker.type = Marker.CUBE
         marker.action = Marker.ADD
 
-        # 중심
-        marker.pose.position.x = 0.0
-        marker.pose.position.y = -2.0
+        marker.pose.position.x = cx
+        marker.pose.position.y = cy
         marker.pose.position.z = 0.0
 
-        # 크기
-        marker.scale.x = 2.0   # -1 ~ 1
-        marker.scale.y = 2.0   # -3 ~ -1
-        marker.scale.z = 0.01  # 얇게
+        marker.scale.x = sx
+        marker.scale.y = sy
+        marker.scale.z = 0.01
 
-        # 반투명 초록
         marker.color.r = 0.0
         marker.color.g = 1.0
         marker.color.b = 0.0
-        marker.color.a = 0.25  # 🔥 반투명
+        marker.color.a = 0.25
 
         self.roi_marker_pub.publish(marker)
+    # 초록 반투명 박스(CUBE): lane_driving 상태에서 쓰는 ROI (x_min~x_max, y_min~y_max) 영역 = “첫 번째 차를 찾는 검색 구역”
+
+    def publish_full_left_roi_filled(self, center):
         
-    def publish_full_left_roi_filled(self, center, r_min=0.3, r_max=3):
+        now = rospy.Time.now()
+        kill = Marker()
+        kill.header.frame_id = "laser"
+        kill.header.stamp = now
+        kill.ns = "roi_fill"
+        kill.id = 0
+        kill.action = Marker.DELETE
+        self.roi_marker_pub.publish(kill)
+        
+        
+        cfg = self.ROI_FULL_LEFT  # YAML: r_min/r_max/angle_deg
+
+        r_min = float(cfg["r_min"])
+        r_max = float(cfg["r_max"])
+        ang = math.radians(float(cfg["angle_deg"]))  # -ang ~ +ang
+
         marker = Marker()
         marker.header.frame_id = "laser"
         marker.header.stamp = rospy.Time.now()
@@ -842,19 +743,16 @@ class Parking:
         marker.scale.y = 1.0
         marker.scale.z = 1.0
 
-        # 반투명 파랑
-        marker.color.r = 0.0
-        marker.color.g = 0.4
+        marker.color.r = 1.0
+        marker.color.g = 0.0
         marker.color.b = 1.0
         marker.color.a = 0.25
 
-        # -------------------------------
-        # 각도 제한: -30 ~ +30 deg (laser 기준)
-        # -------------------------------
-        ang_min = -math.radians(90)
-        ang_max =  math.radians(90)
+        # 각도 범위: -ang ~ +ang (roi()와 동일)
+        ang_min = -ang
+        ang_max =  ang
 
-        num = 40  # 부채꼴 해상도
+        num = 40
         angles = np.linspace(ang_min, ang_max, num)
 
         for i in range(len(angles) - 1):
@@ -862,34 +760,26 @@ class Parking:
             th2 = angles[i + 1]
 
             # inner arc
-            i1 = Point(
-                center[0] + r_min * math.cos(th1),
-                center[1] + r_min * math.sin(th1),
-                0.0
-            )
-            i2 = Point(
-                center[0] + r_min * math.cos(th2),
-                center[1] + r_min * math.sin(th2),
-                0.0
-            )
+            i1 = Point(center[0] + r_min * math.cos(th1),
+                    center[1] + r_min * math.sin(th1),
+                    0.0)
+            i2 = Point(center[0] + r_min * math.cos(th2),
+                    center[1] + r_min * math.sin(th2),
+                    0.0)
 
             # outer arc
-            o1 = Point(
-                center[0] + r_max * math.cos(th1),
-                center[1] + r_max * math.sin(th1),
-                0.0
-            )
-            o2 = Point(
-                center[0] + r_max * math.cos(th2),
-                center[1] + r_max * math.sin(th2),
-                0.0
-            )
+            o1 = Point(center[0] + r_max * math.cos(th1),
+                    center[1] + r_max * math.sin(th1),
+                    0.0)
+            o2 = Point(center[0] + r_max * math.cos(th2),
+                    center[1] + r_max * math.sin(th2),
+                    0.0)
 
-            # 도넛 부채꼴 채우기 (2 triangles)
             marker.points += [o1, i1, i2]
             marker.points += [o1, i2, o2]
 
         self.roi_marker_pub.publish(marker)
+    # 파란 반투명 부채꼴 도넛(TRIANGLE_LIST): full_left_steer 상태에서 first_car를 중심으로 하는 ROI (r_min~r_max + ±angle) = “두 번째 차를 찾는 검색 구역”
 
     def clear_stanley_markers(self):
         now = rospy.Time.now()
@@ -916,6 +806,15 @@ class Parking:
     
     def clear_roi_markers(self):
         now = rospy.Time.now()
+
+        # (추가) 같은 토픽의 모든 마커 제거
+        m = Marker()
+        m.header.frame_id = "laser"
+        m.header.stamp = now
+        m.action = Marker.DELETEALL
+        self.roi_marker_pub.publish(m)
+
+        # 기존처럼 id별 삭제도 유지
         for mid in [0, 1]:
             m = Marker()
             m.header.frame_id = "laser"
@@ -924,68 +823,52 @@ class Parking:
             m.id = mid
             m.action = Marker.DELETE
             self.roi_marker_pub.publish(m)
+    # 위 마커들을 ns/id 기준으로 DELETE해서 RViz에서 지움 (stanley 관련 마커 / roi_fill 마커 정리)
     
     def publish_debug_text(self):
-
-        marker = Marker()
-        marker.header.frame_id = "laser"
-        marker.header.stamp = rospy.Time.now()
-
-        marker.ns = "debug_text"
-        marker.id = 0
-        marker.type = Marker.TEXT_VIEW_FACING
-        marker.action = Marker.ADD
-
-        # 화면 왼쪽 고정 느낌 위치
-        marker.pose.position.x = -1.5
-        marker.pose.position.y = 1.5
-        marker.pose.position.z = 1.2
-
-        marker.scale.z = 0.25  # 글자 크기
-
-        # 기본 흰색
-        marker.color.r = 1.0
-        marker.color.g = 1.0
-        marker.color.b = 1.0
-        marker.color.a = 1.0
 
         def fmt(p):
             if np.any(np.isnan(p)):
                 return "(NaN, NaN)"
             return f"({p[0]:+.2f}, {p[1]:+.2f})"
 
-        # 색상 표시용 이모지 스타일
         f_color = "BLUE" if self.first_updated else "RED"
         s_color = "BLUE" if self.second_updated else "RED"
 
-        text = f"""
-        STATE : {self.state}
+        text = (
+            f"[ PARKING DEBUG ]\n\n"
+            f"STATE : {self.state}\n\n"
+            f"FIRST CAR  [{f_color}]\n"
+            f" detected : {self.first_car_detected}\n"
+            f" pos      : {fmt(self.first_car.reshape(2))}\n\n"
+            f"SECOND CAR [{s_color}]\n"
+            f" detected : {self.second_car_detected}\n"
+            f" pos      : {fmt(self.second_car.reshape(2))}\n\n"
+            f"STEER SOURCE   : {self.steer_source}\n"
+            f"CUR STANLEY TH (up to > {self.CAN_PARK_TH}): {self.can_park_TH}"
+        )
 
-        FIRST CAR  [{f_color}]
-        detected : {self.first_car_detected}
-        pos      : {fmt(self.first_car.reshape(2))}
+        msg = OverlayText()
+        msg.text = text
 
-        SECOND CAR [{s_color}]
-        detected : {self.second_car_detected}
-        pos      : {fmt(self.second_car.reshape(2))}
+        # ---------- 화면 고정 위치 ----------
+        msg.left   = 10     # 좌측 상단
+        msg.top    = 10
+        msg.width  = 420
+        msg.height = 380
+        msg.text_size = 10
 
-        STEER SOURCE : {self.steer_source}
-        TO STANLEY TH ( > -2 check): {self.can_park_TH}
-        """
-
-        marker.text = text.strip()
-
-        # 색상 반영 (전체 텍스트 기준)
-        if not (self.first_updated and self.second_updated):
-            marker.color.r = 1.0
-            marker.color.g = 0.2
-            marker.color.b = 0.2
+        # ---------- 색상 ----------
+        if self.first_updated and self.second_updated:
+            msg.fg_color = ColorRGBA(0.2, 0.6, 1.0, 1.0)  # 파랑
         else:
-            marker.color.r = 0.2
-            marker.color.g = 0.6
-            marker.color.b = 1.0
+            msg.fg_color = ColorRGBA(1.0, 0.2, 0.2, 1.0)  # 빨강
+        msg.bg_color = ColorRGBA(0.0, 0.0, 0.0, 0.0)
 
-        self.roi_marker_pub.publish(marker)
+        self.debug_text_pub.publish(msg)
+
+
+    # 화면 고정 텍스트(TEXT_VIEW_FACING): 현재 STATE, 각 차 인지/업데이트 여부, 좌표, steer source, can_park_TH 같은 디버그 상태판
 
     # ====================================================================================================
 

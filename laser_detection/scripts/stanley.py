@@ -2,9 +2,10 @@
 import rospy, math
 import numpy as np
 from nav_msgs.msg import Path
-from std_msgs.msg import Int16, Bool
+from std_msgs.msg import Int16, ColorRGBA
 from geometry_msgs.msg import Point
 from visualization_msgs.msg import Marker
+from jsk_rviz_plugins.msg import OverlayText
 from tf.transformations import euler_from_quaternion
 
 
@@ -20,6 +21,7 @@ class Stanley:
         rospy.Subscriber("/stanley_path", Path, self.cb_path, queue_size=1)
         self.steer_pub = rospy.Publisher("/parking_stanley_steer", Int16, queue_size=1)
         self.marker_pub = rospy.Publisher("/stanley_debug", Marker, queue_size=10)
+        self.debug_text_pub = rospy.Publisher("/stanley_debug_text",OverlayText,queue_size=1,latch=True)
         
         self.path = None
         
@@ -29,7 +31,7 @@ class Stanley:
         if not msg.poses:
             self.path = None
             self.clear_stanley_markers()
-            self.steer_pub.publish(Int16(int(0)))   # ⭐ 중요
+            self.steer_pub.publish(Int16(int(0)))
             rospy.logwarn_throttle(1.0, "Stanley path invalid → clearing RViz markers")
             return
 
@@ -233,7 +235,6 @@ class Stanley:
 
         # ---------------- utils ----------------
     
-    
     def publish_arrow(self, ns, mid, yaw, color, length, stamp):
         m = Marker()
         m.header.frame_id = "laser"
@@ -308,34 +309,33 @@ class Stanley:
 
 
     def publish_debug_text(self):
-        m = Marker()
-        m.header.frame_id = "laser"
-        m.header.stamp = rospy.Time.now()
 
-        m.ns = "debug_text"
-        m.id = 20
-        m.type = Marker.TEXT_VIEW_FACING
-        m.action = Marker.ADD
+        msg = OverlayText()
 
-        m.pose.position.x = 1.0
-        m.pose.position.y = 5.0
-        m.pose.position.z = 0.0
-
-        m.scale.z = 0.35
-        m.color.r = m.color.g = m.color.b = 1.0
-        m.color.a = 1.0
-
-        m.text = (
-            f"path yaw        : {math.degrees(self.last_path_yaw):+.1f} deg\n"
-            f"motion yaw      : {math.degrees(self.last_motion_yaw):+.1f} deg\n"
-            f"heading err      : {math.degrees(self.last_heading_error):+.1f} deg\n"
-            f"heading err effect : {math.degrees(- k_h*self.last_heading_error):+.1f} deg\n\n"
-            f"lateral err(m)     : {self.last_lateral_error:+.2f} m\n"
-            f"lateral err effect  : {math.degrees(k_l * math.atan2(K * self.last_lateral_error, V)):+.2f} deg\n\n"
-            f"stanley steer cmd : {math.degrees(self.last_steer):+.1f} deg"
+        msg.text = (
+            f"[ STANLEY DEBUG ]\n\n"
+            f"path yaw           : {math.degrees(self.last_path_yaw):+.1f} deg\n"
+            f"motion yaw         : {math.degrees(self.last_motion_yaw):+.1f} deg\n"
+            f"heading error      : {math.degrees(self.last_heading_error):+.1f} deg\n"
+            f"heading effect     : {math.degrees(-k_h*self.last_heading_error):+.1f} deg\n\n"
+            f"lateral error      : {self.last_lateral_error:+.2f} m\n"
+            f"lateral effect     : "
+            f"{math.degrees(k_l * math.atan2(K * self.last_lateral_error, V)):+.2f} deg\n\n"
+            f"stanley steer cmd  : {math.degrees(self.last_steer):+.1f} deg"
         )
 
-        self.marker_pub.publish(m)
+        # ---- 화면 고정 위치 & 스타일 ----
+        msg.width  = 520
+        msg.height = 360   
+        msg.left   = 200   # 우측 상단
+        msg.top    = 10
+        msg.text_size = 10
+
+        msg.fg_color = ColorRGBA(1.0, 1.0, 1.0, 1.0)   # 글자 흰색
+        msg.bg_color = ColorRGBA(0.0, 0.0, 0.0, 0.0)   # 반투명 검정 배경
+
+        self.debug_text_pub.publish(msg)
+
 
 
     def clear_stanley_markers(self):
@@ -357,7 +357,6 @@ class Stanley:
         self.marker_pub.publish(delete("path_yaw", 11))
         self.marker_pub.publish(delete("lateral_error", 12))
         self.marker_pub.publish(delete("heading_error_arc", 13))
-        self.marker_pub.publish(delete("debug_text", 20))
 
 
 if __name__ == "__main__":

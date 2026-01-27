@@ -166,11 +166,32 @@ Visualization Manager:
         {}
       Queue Size: 100
       Value: true
-    - Class: rviz/Marker
+    - Class: jsk_rviz_plugin/OverlayText
       Enabled: true
-      Name: DebugText
-      Marker Topic: /roi_marker
-      Queue Size: 10
+      Name: DebugOverlay
+      Topic: /debug_overlay_text
+      Left: 10
+      Top: 10
+      Width: 420
+      Height: 300
+      Text Size: 14
+      Foreground Color: 255; 255; 255
+      Background Color: 0; 0; 0
+      Background Alpha: 0.6
+
+    - Class: jsk_rviz_plugin/OverlayText
+      Enabled: true
+      Name: StanleyDebugOverlay
+      Topic: /stanley_debug_text
+      Left: 900
+      Top: 10
+      Width: 420
+      Height: 280
+      Text Size: 14
+      Foreground Color: 255; 255; 255
+      Background Color: 0; 0; 0
+      Background Alpha: 0.6
+
     - Class: rviz/Marker
       Enabled: true
       Name: ROI
