@@ -9,10 +9,10 @@
 
 | Name | developement Role |
 | :--- | :--- |
-| `변지훈` | aasdfasdf |
+| `변지훈` | 하드웨어 세팅 / lower_controller / pre_final_planner / object_detector |
 | `한민규` | aasdfasdf |
 | `정민찬` | aasdfasdf |
-| `구동열` | aasdfasdf |
+| `구동열` | parking / lower_controller |
 | `전희중` | aasdfasdf |
 
 <br>
