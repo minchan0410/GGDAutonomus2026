@@ -23,6 +23,10 @@ pre_final_planner/
    └─ lane_bev_rviz.py
 ```
 
+<div align="center">
+  <img src="./assets/final_planner_snap.png" alt="poster" width="600">
+</div>
+
 ## 노드 요약
 
 ### `pre_planner.py`
@@ -110,7 +114,3 @@ roslaunch pre_final_planner final_planner.launch
 패키지 선언: `roscpp`, `rospy`, `std_msgs`  
 스크립트 사용: `geometry_msgs`, `visualization_msgs`, `nav_msgs`, `jsk_rviz_plugins`, `numpy`
 
-## 참고
-
-- `final_planner_rviz.py`는 **/ultrasonic1** 토픽을 구독합니다. 센서 토픽명이 다르면 파라미터 또는 코드에서 조정하세요.
-- RViz 설정은 `rviz/final_planner.rviz`에 포함되어 있습니다.

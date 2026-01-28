@@ -43,6 +43,7 @@
 ## Package Overview
 
 - ### arduino_motor_bridge
+    Arduino ROS serial bridge for motor PWM control + potentiometer/ultrasonic IO.
 
 - ### lane_detection
     Lane detect by OpenCV, additional filtering algorithm (DBSCAN..)
@@ -51,10 +52,13 @@
     Detect parked cars for parking mission 
 
 - ### lateral_controller
+    Lower-level steering PID: /des_steer + potentiometer -> /motor_cmd_steer.
 
 - ### object_detector
+    YOLO car detection + ROI filter, plus 2D->ground projection for nearest car.
 
 - ### pre_final_planner
+    Pre/Final planner modes: lane following + obstacle/traffic logic (with RViz HUD).
 
 - ### rplidar_ros
     to run rplidar's 2d lidar
