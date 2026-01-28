@@ -24,7 +24,7 @@ pre_final_planner/
 ```
 <br>
 <div align="center">
-  <img src="./assets/final_planner_snap.png" alt="poster" width="600">
+  <img src="./imgs/final_planner_snap.png" alt="poster" width="600">
 </div>
 <br>
 
