@@ -71,7 +71,7 @@ Final planner 상태를 **ROI/초음파 바/텍스트 HUD**로 시각화합니�
   - `/final_planner/yolo_crash` (std_msgs/Bool)
   - `/final_planner/sonic_crash` (std_msgs/Bool)
   - `/final_planner/lane_change_reason` (std_msgs/String)
-  - `/ultrasonic1` (std_msgs/Int16)  **(주의: final_planner는 /ultrasonic 사용)**
+  - `/ultrasonic1` (std_msgs/Int16)  
 - 출력
   - `/final_planner/markers` (visualization_msgs/MarkerArray)
   - `/final_planner/hud` (jsk_rviz_plugins/OverlayText)
