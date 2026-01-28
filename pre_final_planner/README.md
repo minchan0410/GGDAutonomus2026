@@ -22,10 +22,11 @@ pre_final_planner/
    ├─ final_planner_rviz.py
    └─ lane_bev_rviz.py
 ```
-
+<br>
 <div align="center">
   <img src="./assets/final_planner_snap.png" alt="poster" width="600">
 </div>
+<br>
 
 ## 노드 요약
 
