@@ -11,7 +11,7 @@
 | :--- | :--- |
 | `변지훈` | 하드웨어 세팅 / lower_controller / pre_final_planner / object_detector |
 | `한민규` | aasdfasdf |
-| `정민찬` | 'lane_detector' / laser_detector / object_detector (traffic) |
+| `정민찬` | `lane_detector` / `laser_detector` / `object_detector (traffic)` |
 | `구동열` | parking / lower_controller |
 | `전희중` | aasdfasdf |
 
