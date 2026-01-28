@@ -42,32 +42,40 @@
 
 ## Package Overview
 
-###For mission, system
+### For mission, system
 - **arduino_motor_bridge**
+    <br>
     Arduino ROS serial bridge for motor PWM control + potentiometer/ultrasonic IO.
 
 - **lane_detection**
+    <br>
     Lane detect by OpenCV, additional filtering algorithm (DBSCAN..)
     Crosswalk detect by OpenCV
 
 - **laser_detection**
+    <br>
     Detect parked cars by lidar (parking mission) 
 
 - **lateral_controller**
+    <br>
     Lower-level steering PID: /des_steer + potentiometer -> /motor_cmd_steer.
 
 - **object_detector**
+    <br>
     YOLO car detection + ROI filter, plus 2D->ground projection for nearest car.
     YOLO traffic detection
 
 - **pre_final_planner**
+    <br>
     Pre/Final planner modes: lane following + obstacle/traffic logic (with RViz HUD).
 
-###For sensors
+### For sensors
 - **rplidar_ros**
+    <br>
     to run rplidar's 2d lidar
 
 - **usb_cam**
+    <br>
     to run logitech c920 cameras
 
 <br>
@@ -80,14 +88,6 @@
   asdfasdf
   ```
   
-
 <br>
 
-## Table
-
-### Input table
-| Name | Type | Uses |
-| :--- | :--- | :--- |
-| `asdf` | `asdf` | asdf |
-
-<br>
+# Mission Vids
