@@ -27,7 +27,7 @@
 
 ## **System Structure**
 <div align="center">
-  <img src="./assets/system.png" alt="poster" width="600">
+  <img src="./assets/아키텍처 다이어그램 ver3.jpg" alt="poster" width="600">
 </div>
 
 <br>
