@@ -1,0 +1,41 @@
+<launch>
+
+  <param name="/use_sim_time" value="false" />
+
+  <!-- RPLIDAR-->
+  <node name="rplidarNode" pkg="rplidar_ros" type="rplidarNode" output="screen">
+    <param name="serial_port"      value="/dev/ttyUSB0"/>
+    <param name="serial_baudrate"  value="115200"/>
+    <param name="frame_id"         value="laser"/>
+    <param name="inverted"         value="false"/>
+    <param name="angle_compensate" value="true"/>
+  </node>
+  
+
+    <!-- laser_detection -->
+    <node name="detection" pkg="laser_detection" type="detection" output="screen">
+        <rosparam command="load" file="$(find laser_detection)/config/params.yaml" />
+    </node>
+
+    <!-- occupancy grid -->
+    <node name="occ_grid" pkg="laser_detection" type="occ_grid" output="screen" />
+      
+    <!-- Stanley Controller -->
+    <node name="stanley" pkg="laser_detection" type="stanley.py" output="screen" />
+    
+    <!-- Lane Controller-->
+    <node name="run" pkg="lane_detection" type="run.py" output="screen" />
+    
+    
+    <!-- Parking Planner-->
+    <node name="parking" pkg="laser_detection" type="parking.py" output="screen">
+      <rosparam command='load' file="$(find laser_detection)/config/parking.yaml"/>
+    </node>
+	
+    <!-- rviz -->
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find laser_detection)/rviz/detection.rviz" />
+
+    <!-- rosbag TODO -->
+    <!-- <node pkg="rosbag" type="play" name="parking_bag" args="$(find GGDAutonomus2026)/rosbag/parking/parking_done.bag" output="screen" /> -->
+
+</launch>
