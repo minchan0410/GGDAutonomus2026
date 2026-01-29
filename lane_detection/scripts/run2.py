@@ -160,7 +160,7 @@ class LaneDetector:
         # y좌표 기준: 차선의 위쪽 영역 (아래쪽은 겹칠 수 있으나 윗부분이 반대로 가는 건 노이즈)
         
         threshold_x = img_w // 2  # 화면 중앙
-        threshold_y = img_h * 0.8 # 하단 20%를 제외한 위쪽 영역
+        threshold_y = img_h * 0.5 # 하단 20%를 제외한 위쪽 영역
         
         for line in lines:
             x1, y1, x2, y2 = line
