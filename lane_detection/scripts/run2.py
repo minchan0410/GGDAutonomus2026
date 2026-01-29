@@ -229,8 +229,11 @@ class LaneDetector:
         right_result = average_lines_projected(right_lines, y_top, h)
 
         # 6. Steering Compute & Line Drawing
-        left_mid_point, right_mid_point = 0, w
+        # 기본값 설정
+        left_mid_point = 0
+        right_mid_point = w
 
+        # (1) 왼쪽 차선 좌표 계산 및 시각화
         if left_result:
             lx1, ly1, lx2, ly2 = left_result
             if (ly2 - ly1) != 0:
@@ -239,6 +242,7 @@ class LaneDetector:
                 left_mid_point = lx1
             cv2.line(mask_bgr, (lx1, ly1), (lx2, ly2), (0, 0, 255), 3)
 
+        # (2) 오른쪽 차선 좌표 계산 및 시각화
         if right_result:
             lx1, ly1, lx2, ly2 = right_result
             if (ly2 - ly1) != 0:
@@ -247,6 +251,21 @@ class LaneDetector:
                 right_mid_point = lx1
             cv2.line(mask_bgr, (lx1, ly1), (lx2, ly2), (255, 0, 0), 3)
         
+        # ==============================================================================
+        # [NEW] 차선 역전(Crossing) 방지 및 최소 간격 유지 로직
+        # ==============================================================================
+        if left_result and right_result:
+            min_lane_width = 50  # 사용자가 요청한 최소 간격 50px
+            
+            # 왼쪽 차선이 너무 오른쪽으로 갔을 경우 (Right - 50 보다 클 경우)
+            if left_mid_point > (right_mid_point - min_lane_width):
+                left_mid_point = right_mid_point - min_lane_width
+            
+            # (안전장치) 오른쪽 차선이 너무 왼쪽으로 갔을 경우 (위에서 수정된 Left + 50 기준)
+            if right_mid_point < (left_mid_point + min_lane_width):
+                right_mid_point = left_mid_point + min_lane_width
+        # ==============================================================================
+
         final_midpoint = int((left_mid_point + right_mid_point) / 2)
         image_center_x = w // 2
         self.steer_history.append(final_midpoint)
