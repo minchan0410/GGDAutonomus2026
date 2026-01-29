@@ -143,6 +143,51 @@ class LaneDetector:
                 filtered_lines.append(lines[valid_indices[i]])
         return filtered_lines
 
+    def filter_by_position(self, lines, side, img_w, img_h):
+        """
+        DBSCAN 이후, 반대편 상단 영역에 잘못 검출된 노이즈 선을 제거합니다.
+        :param lines: [[x1, y1, x2, y2], ...] 형태의 리스트
+        :param side: 'left' or 'right'
+        :param img_w: 이미지 너비
+        :param img_h: 이미지 높이
+        """
+        if not lines: return []
+
+        filtered_lines = []
+        
+        # 1. 제외할 영역(Forbidden Zone) 설정
+        # x좌표 기준: 화면의 중앙 (중앙을 넘어가면 반대편 차선일 확률 높음)
+        # y좌표 기준: 차선의 위쪽 영역 (아래쪽은 겹칠 수 있으나 윗부분이 반대로 가는 건 노이즈)
+        
+        threshold_x = img_w // 2  # 화면 중앙
+        threshold_y = img_h * 0.8 # 하단 20%를 제외한 위쪽 영역
+        
+        for line in lines:
+            x1, y1, x2, y2 = line
+            
+            # 선의 중점(Midpoint) 계산
+            mx = (x1 + x2) / 2
+            my = (y1 + y2) / 2
+            
+            is_noise = False
+            
+            if side == 'left':
+                # 왼쪽 차선 그룹인데, 위치가 '오른쪽 위'에 있는 경우 제거
+                # 조건: x가 중앙보다 크고(Right), y가 임계값보다 작음(Top)
+                if mx > threshold_x and my < threshold_y:
+                    is_noise = True
+                    
+            elif side == 'right':
+                # 오른쪽 차선 그룹인데, 위치가 '왼쪽 위'에 있는 경우 제거
+                # 조건: x가 중앙보다 작고(Left), y가 임계값보다 작음(Top)
+                if mx < threshold_x and my < threshold_y:
+                    is_noise = True
+            
+            if not is_noise:
+                filtered_lines.append(line)
+                
+        return filtered_lines
+
     def image_callback(self, msg):
         start_time = time.time() 
         
@@ -199,7 +244,7 @@ class LaneDetector:
         self.pub_cross.publish(Int16(final_cross_status))
 
         # 4. Hough Transform
-        lines = cv2.HoughLinesP(mask_roi_applied, rho=1, theta=np.pi/180, threshold=50, minLineLength=50, maxLineGap=50)
+        lines = cv2.HoughLinesP(mask_roi_applied, rho=1, theta=np.pi/180, threshold=50, minLineLength=90, maxLineGap=100)
         
         # 시각화를 위한 BGR 이미지는 여기서 생성 (그리기 작업을 위해 필요)
         mask_bgr = cv2.cvtColor(mask_roi_applied, cv2.COLOR_GRAY2BGR)
@@ -222,8 +267,15 @@ class LaneDetector:
                 if ls + lm <= 0: left_lines.append([x1, y1, x2, y2])
                 else: right_lines.append([x1, y1, x2, y2])
         
+        # (1) DBSCAN Clustering
         left_lines = self.filter_by_dbscan(left_lines, h)
         right_lines = self.filter_by_dbscan(right_lines, h)
+
+        # (2) [NEW] Position Filtering (잘못된 영역의 선 제거)
+        # 왼쪽 라인: 중앙보다 오른쪽 위(Right-Upper) 영역 제거
+        left_lines = self.filter_by_position(left_lines, 'left', w, h)
+        # 오른쪽 라인: 중앙보다 왼쪽 위(Left-Upper) 영역 제거
+        right_lines = self.filter_by_position(right_lines, 'right', w, h)
 
         left_result = average_lines_projected(left_lines, y_top, h)
         right_result = average_lines_projected(right_lines, y_top, h)
@@ -251,28 +303,21 @@ class LaneDetector:
                 right_mid_point = lx1
             cv2.line(mask_bgr, (lx1, ly1), (lx2, ly2), (255, 0, 0), 3)
         
-        # ==============================================================================
-        # [NEW] 차선 역전(Crossing) 방지 및 최소 간격 유지 로직
-        # ==============================================================================
+        # 차선 역전(Crossing) 방지 및 최소 간격 유지 로직
         if left_result and right_result:
-            min_lane_width = 50  # 사용자가 요청한 최소 간격 50px
-            
-            # 왼쪽 차선이 너무 오른쪽으로 갔을 경우 (Right - 50 보다 클 경우)
+            min_lane_width = 200  
             if left_mid_point > (right_mid_point - min_lane_width):
                 left_mid_point = right_mid_point - min_lane_width
-            
-            # (안전장치) 오른쪽 차선이 너무 왼쪽으로 갔을 경우 (위에서 수정된 Left + 50 기준)
             if right_mid_point < (left_mid_point + min_lane_width):
                 right_mid_point = left_mid_point + min_lane_width
-        # ==============================================================================
-
+        
         final_midpoint = int((left_mid_point + right_mid_point) / 2)
         image_center_x = w // 2
         self.steer_history.append(final_midpoint)
         
         filtered_midpoint = int(sum(self.steer_history) / len(self.steer_history)) if self.steer_history else final_midpoint
         
-        pubdata = int(-(filtered_midpoint - image_center_x) * 0.2 )
+        pubdata = int(-(filtered_midpoint - image_center_x) * 0.17 )
         self.pub_steer.publish(Int16(pubdata))
 
         # 7. Publish Topics
@@ -288,7 +333,7 @@ class LaneDetector:
         target_msg.point.y = y_mid
         self.pub_target_px.publish(target_msg)
 
-        # 8. Visualization Overlay (사용자 요청 사항 복구)
+        # 8. Visualization Overlay 
         # (1) ROI Polygon
         cv2.polylines(mask_bgr, roi_verts, isClosed=True, color=(0, 255, 0), thickness=2)
         
@@ -310,6 +355,9 @@ class LaneDetector:
         cv2.circle(mask_bgr, (filtered_midpoint, y_mid), 20, (255, 255, 0), -1)
         cv2.putText(mask_bgr, f"Offset: {pubdata}", (filtered_midpoint - 80, y_mid - 40), 
                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+        
+        cv2.circle(mask_bgr, (left_mid_point, y_mid), 20, (0, 0, 255), -1)
+        cv2.circle(mask_bgr, (right_mid_point, y_mid), 20, (255, 0, 0), -1)
 
         # (6) Crossline Warning
         if final_cross_status == 1:
@@ -327,7 +375,7 @@ class LaneDetector:
         end_time = time.time()
         elapsed_time = int((end_time - start_time) * 1000) 
         
-        # 15ms 이상 소요될 때만 경고 출력 (I/O 부하 감소)
+        # 15ms 이상 소요될 때만 경고 출력
         if elapsed_time > 15: 
              print(f"[Lag Warning] Loop Time: {elapsed_time}ms | White: {white_pixel_area}")
 
