@@ -12,7 +12,6 @@ from sensor_msgs.msg import Image
 from std_msgs.msg import Int16, Int32MultiArray
 from geometry_msgs.msg import PointStamped
 from cv_bridge import CvBridge, CvBridgeError
-from sklearn.cluster import DBSCAN
 from collections import deque
 
 # ==========================================
@@ -21,7 +20,7 @@ from collections import deque
 IMAGE_TOPIC = "/cam1/usb_cam/image_raw" 
 
 # ==========================================
-# 보조 함수
+# 보조 함수 (CPU 연산 유지)
 # ==========================================
 def calculate_midpoint_score(x1, x2, w):
     hw = w/2
@@ -57,8 +56,44 @@ def average_lines_projected(lines, y_min, y_max):
     avg_x_bottom = int(np.mean(x_bottoms))
     return [avg_x_top, y_min, avg_x_bottom, y_max]
 
+# [NEW] 중간 영역 필터링 함수 추가
+def filter_middle_33_percent(lines):
+    """
+    직선들의 중점 Y좌표를 기준으로 정렬 후,
+    상위 33% (화면 위쪽), 하위 33% (화면 아래쪽)을 버리고
+    중간 34% 영역의 직선만 남깁니다.
+    """
+    if not lines or len(lines) < 3: 
+        # 라인이 너무 적으면 필터링 없이 반환 (최소 3개는 있어야 자를 수 있음)
+        return lines
+
+    # 1. (line, midpoint_y) 튜플 리스트 생성
+    # y좌표가 작을수록 화면 위, 클수록 화면 아래
+    lines_with_mid = []
+    for line in lines:
+        x1, y1, x2, y2 = line
+        mid_x = (x1 + x2) / 2.0
+        lines_with_mid.append((line, mid_x))
+
+    # 2. x 중점 기준으로 정렬
+    lines_with_mid.sort(key=lambda x: x[1])
+
+    # 3. 자를 인덱스 계산
+    total_count = len(lines)
+    start_idx = int(total_count * 0.33)       # 상위 33% 제외
+    end_idx = int(total_count * (1 - 0.33))   # 하위 33% 제외
+
+    # 4. 슬라이싱 (안전장치 포함)
+    if start_idx >= end_idx:
+        return lines
+        
+    filtered_data = lines_with_mid[start_idx:end_idx]
+    
+    # 원래 포맷([x1, y1, x2, y2])으로 복원하여 반환
+    return [item[0] for item in filtered_data]
+
 # ==========================================
-# Lane Detector Class
+# Lane Detector Class with CUDA
 # ==========================================
 class LaneDetector:
     def __init__(self):
@@ -71,7 +106,6 @@ class LaneDetector:
         self.pub_cross = rospy.Publisher("/crossline", Int16, queue_size=10)
         
         self.bridge = CvBridge()
-        # queue_size=1, buff_size를 키워서 최신 프레임만 빠르게 받도록 설정
         self.image_sub = rospy.Subscriber(IMAGE_TOPIC, Image, self.image_callback, queue_size=1, buff_size=2**24)
         
         self.window_size = 15
@@ -80,143 +114,90 @@ class LaneDetector:
         self.cross_threshold = 20000  
         self.cross_queue = deque(maxlen=10) 
 
-        # [Thread] 시각화 전용 스레드 설정
+        # [CUDA Init]
+        try:
+            self.gpu_src = cv2.cuda_GpuMat()
+            self.gpu_roi_mask = cv2.cuda_GpuMat()
+            self.cuda_gaussian = cv2.cuda.createGaussianFilter(cv2.CV_8UC1, cv2.CV_8UC1, (7, 7), 0)
+            self.cuda_canny = cv2.cuda.createCannyEdgeDetector(100, 200)
+            
+            kernel_erode = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+            self.cuda_erode = cv2.cuda.createMorphologyFilter(cv2.MORPH_ERODE, cv2.CV_8UC1, kernel_erode, iterations=1)
+            
+            kernel_dilate = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+            self.cuda_dilate = cv2.cuda.createMorphologyFilter(cv2.MORPH_DILATE, cv2.CV_8UC1, kernel_dilate, iterations=3)
+
+            # Hough Parameter
+            self.cuda_hough = cv2.cuda.createHoughSegmentDetector(
+                1.0, 
+                np.pi / 180.0,
+                50, # 최소 선 길이
+                1 # 최대 허용 간격
+            )
+            print("CUDA Accelerated OpenCV Initialized Successfully.")
+        except AttributeError:
+            print("[ERROR] No CUDA Support")
+            rospy.signal_shutdown("No CUDA Support")
+
         self.vis_queue = queue.Queue(maxsize=1) 
         self.is_running = True
         self.vis_thread = threading.Thread(target=self.display_worker)
         self.vis_thread.daemon = True 
         self.vis_thread.start()
 
-        print(f"Waiting for image topic: {IMAGE_TOPIC}...")
-
     def display_worker(self):
-        """ 시각화(imshow)만 담당하는 스레드 함수 """
         while self.is_running and not rospy.is_shutdown():
             try:
-                # 0.1초 대기 후 없으면 다시 루프 (블로킹 방지)
                 img = self.vis_queue.get(timeout=0.1)
-                cv2.imshow('Lane Detector', img)
+                cv2.imshow('Lane Detector (CUDA)', img)
                 cv2.waitKey(1)
             except queue.Empty:
                 pass
             except Exception as e:
                 rospy.logwarn(f"Display Error: {e}")
 
-    def filter_by_dbscan(self, lines, img_height):
-        if not lines or len(lines) < 2: return lines
-        features = []
-        valid_indices = []
-        for i, line in enumerate(lines):
-            x1, y1, x2, y2 = line
-            if x2 - x1 == 0: continue
-            slope = (y2 - y1) / (x2 - x1)
-            if abs(slope) < 1e-2: continue
-            angle = math.atan(slope)
-            x_bottom = (img_height - y1) / slope + x1
-            features.append([angle, x_bottom])
-            valid_indices.append(i)
-            
-        if not features: return lines
-
-        features = np.array(features)
-        weight_angle = 100.0  
-        weight_dist  = 0.20   
-        features_scaled = np.column_stack((features[:, 0] * weight_angle, features[:, 1] * weight_dist))
-
-        db = DBSCAN(eps=25.0, min_samples=2).fit(features_scaled)
-        labels = db.labels_
-        unique_labels = set(labels)
-        if -1 in unique_labels: unique_labels.remove(-1)
-        if not unique_labels: return [] 
-
-        best_label = -1
-        max_count = 0
-        for label in unique_labels:
-            count = np.sum(labels == label)
-            if count > max_count:
-                max_count = count
-                best_label = label
-        
-        filtered_lines = []
-        for i, label in enumerate(labels):
-            if label == best_label:
-                filtered_lines.append(lines[valid_indices[i]])
-        return filtered_lines
-
     def filter_by_position(self, lines, side, img_w, img_h):
-        """
-        DBSCAN 이후, 반대편 상단 영역에 잘못 검출된 노이즈 선을 제거합니다.
-        :param lines: [[x1, y1, x2, y2], ...] 형태의 리스트
-        :param side: 'left' or 'right'
-        :param img_w: 이미지 너비
-        :param img_h: 이미지 높이
-        """
         if not lines: return []
-
         filtered_lines = []
-        
-        # 1. 제외할 영역(Forbidden Zone) 설정
-        # x좌표 기준: 화면의 중앙 (중앙을 넘어가면 반대편 차선일 확률 높음)
-        # y좌표 기준: 차선의 위쪽 영역 (아래쪽은 겹칠 수 있으나 윗부분이 반대로 가는 건 노이즈)
-        
-        threshold_x = img_w // 2  # 화면 중앙
-        threshold_y = img_h * 0.5 # 하단 20%를 제외한 위쪽 영역
-        
+        threshold_x = img_w // 2 
+        threshold_y = img_h * 0.8 
         for line in lines:
             x1, y1, x2, y2 = line
-            
-            # 선의 중점(Midpoint) 계산
             mx = (x1 + x2) / 2
             my = (y1 + y2) / 2
-            
             is_noise = False
-            
             if side == 'left':
-                # 왼쪽 차선 그룹인데, 위치가 '오른쪽 위'에 있는 경우 제거
-                # 조건: x가 중앙보다 크고(Right), y가 임계값보다 작음(Top)
-                if mx > threshold_x and my < threshold_y:
-                    is_noise = True
-                    
+                if mx > threshold_x and my < threshold_y: is_noise = True
             elif side == 'right':
-                # 오른쪽 차선 그룹인데, 위치가 '왼쪽 위'에 있는 경우 제거
-                # 조건: x가 중앙보다 작고(Left), y가 임계값보다 작음(Top)
-                if mx < threshold_x and my < threshold_y:
-                    is_noise = True
-            
-            if not is_noise:
-                filtered_lines.append(line)
-                
+                if mx < threshold_x and my < threshold_y: is_noise = True
+            if not is_noise: filtered_lines.append(line)
         return filtered_lines
 
     def image_callback(self, msg):
         start_time = time.time() 
-        
         try:
             frame = self.bridge.imgmsg_to_cv2(msg, "bgr8")
         except CvBridgeError as e:
-            rospy.logerr(e)
             return
 
         h, w = frame.shape[:2]
         cx = w // 2
         
-        # 1. Pre-processing
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        blur = cv2.GaussianBlur(gray, (7, 7), 0)
-        edges = cv2.Canny(blur, 100, 200)
-        
-        _, mask = cv2.threshold(gray, 1, 255, cv2.THRESH_BINARY)
-        mask = cv2.erode(mask, np.ones((5, 5), np.uint8), iterations=1)
-        edges = cv2.bitwise_and(edges, edges, mask=mask)
-        edges = cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=3)
-        mask_eroded = edges 
+        # 1. Pre-processing (CUDA)
+        self.gpu_src.upload(frame)
+        gpu_gray = cv2.cuda.cvtColor(self.gpu_src, cv2.COLOR_BGR2GRAY)
+        gpu_blur = self.cuda_gaussian.apply(gpu_gray)
+        gpu_edges = self.cuda_canny.detect(gpu_blur)
+        _, gpu_thresh = cv2.cuda.threshold(gpu_gray, 1, 255, cv2.THRESH_BINARY)
+        gpu_mask = self.cuda_erode.apply(gpu_thresh)
+        gpu_edges = cv2.cuda.bitwise_and(gpu_edges, gpu_edges, mask=gpu_mask)
+        gpu_edges = self.cuda_dilate.apply(gpu_edges)
 
-        # 2. ROI 
+        # 2. ROI Logic
         roi_height = 0.45        
         y_top = int(h * (1 - roi_height))
         y_mid = int(h * (1 - roi_height / 2))
         
-        # ROI Polygon
         roi_verts = np.array([[
             (cx - int(w * 0.5), h),
             (cx - int(w * 0.45), y_top),
@@ -224,19 +205,19 @@ class LaneDetector:
             (cx + int(w * 0.5), h)
         ]], dtype=np.int32)
 
-        roi_mask_img = np.zeros_like(mask_eroded)
-        cv2.fillPoly(roi_mask_img, roi_verts, 255)
-
-        # Hood Mask
+        roi_mask_cpu = np.zeros((h, w), dtype=np.uint8)
+        cv2.fillPoly(roi_mask_cpu, roi_verts, 255)
         hood_h = int(h * 0.1)
         hood_w_half = int((w * 0.50) / 2)
         hood_top_left = (cx - hood_w_half, h - hood_h)
         hood_bottom_right = (cx + hood_w_half, h)
-        cv2.rectangle(roi_mask_img, hood_top_left, hood_bottom_right, 0, -1)
+        cv2.rectangle(roi_mask_cpu, hood_top_left, hood_bottom_right, 0, -1)
         
-        mask_roi_applied = cv2.bitwise_and(mask_eroded, roi_mask_img)
+        self.gpu_roi_mask.upload(roi_mask_cpu)
+        gpu_roi_applied = cv2.cuda.bitwise_and(gpu_edges, self.gpu_roi_mask)
 
-        # 3. Crosswalk Logic
+        # 3. CPU Logic Requirement
+        mask_roi_applied = gpu_roi_applied.download()
         white_pixel_area = cv2.countNonZero(mask_roi_applied)
         is_detected_now = 1 if white_pixel_area > self.cross_threshold else 0
         self.cross_queue.append(is_detected_now)
@@ -244,13 +225,17 @@ class LaneDetector:
         self.pub_cross.publish(Int16(final_cross_status))
 
         # 4. Hough Transform
-        lines = cv2.HoughLinesP(mask_roi_applied, rho=1, theta=np.pi/180, threshold=50, minLineLength=90, maxLineGap=100)
-        
-        # 시각화를 위한 BGR 이미지는 여기서 생성 (그리기 작업을 위해 필요)
+        d_lines = self.cuda_hough.detect(gpu_roi_applied)
+        if d_lines is not None and not d_lines.empty():
+            lines = d_lines.download()
+            lines = lines.reshape(-1, 1, 4)
+        else:
+            lines = None
+
         mask_bgr = cv2.cvtColor(mask_roi_applied, cv2.COLOR_GRAY2BGR)
 
-        # 5. Filter & Lane Compute
-        filtering_slope = 0.4 
+        # 5. Filter & Lane Compute (CPU)
+        filtering_slope = 0.5 
         right_lines, left_lines = [], []
         
         if lines is not None:
@@ -266,26 +251,33 @@ class LaneDetector:
 
                 if ls + lm <= 0: left_lines.append([x1, y1, x2, y2])
                 else: right_lines.append([x1, y1, x2, y2])
-        
-        # (1) DBSCAN Clustering
-        left_lines = self.filter_by_dbscan(left_lines, h)
-        right_lines = self.filter_by_dbscan(right_lines, h)
 
-        # (2) [NEW] Position Filtering (잘못된 영역의 선 제거)
-        # 왼쪽 라인: 중앙보다 오른쪽 위(Right-Upper) 영역 제거
+        # Position Filtering
         left_lines = self.filter_by_position(left_lines, 'left', w, h)
-        # 오른쪽 라인: 중앙보다 왼쪽 위(Left-Upper) 영역 제거
         right_lines = self.filter_by_position(right_lines, 'right', w, h)
+        
+        # -------------------------------------------------------------
+        # [NEW] 상위 33%, 하위 33% 제거 필터링 적용 (중간 34%만 남김)
+        # -------------------------------------------------------------
+        left_lines = filter_middle_33_percent(left_lines)
+        right_lines = filter_middle_33_percent(right_lines)
+        # -------------------------------------------------------------
+        
+        # Visualization Lines (Raw)
+        if left_lines:
+            for lx1, ly1, lx2, ly2 in left_lines:
+                cv2.line(mask_bgr, (lx1, ly1), (lx2, ly2), (0, 0, 255), 1)
+        if right_lines:
+            for lx1, ly1, lx2, ly2 in right_lines:
+                cv2.line(mask_bgr, (lx1, ly1), (lx2, ly2), (255, 0, 0), 1)
 
         left_result = average_lines_projected(left_lines, y_top, h)
         right_result = average_lines_projected(right_lines, y_top, h)
 
-        # 6. Steering Compute & Line Drawing
-        # 기본값 설정
+        # 6. Steering Compute
         left_mid_point = 0
         right_mid_point = w
 
-        # (1) 왼쪽 차선 좌표 계산 및 시각화
         if left_result:
             lx1, ly1, lx2, ly2 = left_result
             if (ly2 - ly1) != 0:
@@ -294,7 +286,6 @@ class LaneDetector:
                 left_mid_point = lx1
             cv2.line(mask_bgr, (lx1, ly1), (lx2, ly2), (0, 0, 255), 3)
 
-        # (2) 오른쪽 차선 좌표 계산 및 시각화
         if right_result:
             lx1, ly1, lx2, ly2 = right_result
             if (ly2 - ly1) != 0:
@@ -303,7 +294,6 @@ class LaneDetector:
                 right_mid_point = lx1
             cv2.line(mask_bgr, (lx1, ly1), (lx2, ly2), (255, 0, 0), 3)
         
-        # 차선 역전(Crossing) 방지 및 최소 간격 유지 로직
         if left_result and right_result:
             min_lane_width = 200  
             if left_mid_point > (right_mid_point - min_lane_width):
@@ -320,7 +310,7 @@ class LaneDetector:
         pubdata = int(-(filtered_midpoint - image_center_x) * 0.2 )
         self.pub_steer.publish(Int16(pubdata))
 
-        # 7. Publish Topics
+        # 7. Publish & Vis
         lane_data = [-1] * 8
         if left_result: lane_data[0:4] = left_result
         if right_result: lane_data[4:8] = right_result
@@ -333,25 +323,18 @@ class LaneDetector:
         target_msg.point.y = y_mid
         self.pub_target_px.publish(target_msg)
 
-        # 8. Visualization Overlay 
-        # (1) ROI Polygon
         cv2.polylines(mask_bgr, roi_verts, isClosed=True, color=(0, 255, 0), thickness=2)
-        
-        # (2) Center Line
         cv2.line(mask_bgr, (cx, 0), (cx, h), (255, 255, 255), 1)
 
-        # (3) White Pixel Count
         area_text = f"White Area: {white_pixel_area}"
         (text_w, text_h), _ = cv2.getTextSize(area_text, cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2)
         cv2.putText(mask_bgr, area_text, (w - text_w - 20, 40), 
                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
 
-        # (4) Hood Mask Rect & Text
         cv2.rectangle(mask_bgr, hood_top_left, hood_bottom_right, (0, 0, 255), 2)
         cv2.putText(mask_bgr, "Hood Mask", (hood_top_left[0], hood_top_left[1]-5), 
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
 
-        # (5) Target & Offset
         cv2.circle(mask_bgr, (filtered_midpoint, y_mid), 20, (255, 255, 0), -1)
         cv2.putText(mask_bgr, f"Offset: {pubdata}", (filtered_midpoint - 80, y_mid - 40), 
                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
@@ -359,25 +342,19 @@ class LaneDetector:
         cv2.circle(mask_bgr, (left_mid_point, y_mid), 20, (0, 0, 255), -1)
         cv2.circle(mask_bgr, (right_mid_point, y_mid), 20, (255, 0, 0), -1)
 
-        # (6) Crossline Warning
         if final_cross_status == 1:
             warning_text = "CROSSLINE DETECTED"
             (tw, th), _ = cv2.getTextSize(warning_text, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 1)
             cv2.putText(mask_bgr, warning_text, (cx - tw//2, h//2), 
                         cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3)
 
-        # ----------------------------------------------------------------
-        # [Thread Queue] 완성된 이미지를 디스플레이 스레드로 전달
-        # ----------------------------------------------------------------
         if not self.vis_queue.full():
             self.vis_queue.put_nowait(mask_bgr)
 
         end_time = time.time()
         elapsed_time = int((end_time - start_time) * 1000) 
-        
-        # 15ms 이상 소요될 때만 경고 출력
-        if elapsed_time > 15: 
-             print(f"[Lag Warning] Loop Time: {elapsed_time}ms | White: {white_pixel_area}")
+        if elapsed_time > 10: 
+             print(f"[Lag Warning] Loop Time: {elapsed_time}ms")
 
     def clean_up(self):
         self.is_running = False
