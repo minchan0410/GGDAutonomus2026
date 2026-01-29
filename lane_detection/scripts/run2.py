@@ -317,7 +317,7 @@ class LaneDetector:
         
         filtered_midpoint = int(sum(self.steer_history) / len(self.steer_history)) if self.steer_history else final_midpoint
         
-        pubdata = int(-(filtered_midpoint - image_center_x) * 0.17 )
+        pubdata = int(-(filtered_midpoint - image_center_x) * 0.2 )
         self.pub_steer.publish(Int16(pubdata))
 
         # 7. Publish Topics

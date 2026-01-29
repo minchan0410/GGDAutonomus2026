@@ -5,8 +5,8 @@ planner_common:
     # offset_x는 ROI를 전방으로 이동시키는 보정값
     min_x: 0.0
     max_x: 1.2
-    min_y: -0.5
-    max_y: 0.5 #왼쪽
+    min_y: -1.35
+    max_y: 1.35 #왼쪽
     offset_x: 0.7
   ultrasonic:
     # 초음파 센서 값 전처리 설정
@@ -29,14 +29,50 @@ final_planner:
   speed_high: 255
   lc_steer: 22.5
 
-  steer_time1: 1.6
-  straight_time1: 0.7
-  steer_time2: 2.3
+  steer_time1: 2.3  
+  straight_time1: 1.5
+  steer_time2: 1.8
   straight_time2: 0.0
-  steer_time3: 0.6
+  steer_time3: 0.8
 
   queues_maxlen: 5
   yolo_count_threshold: 3
   ultrasonic_count_threshold: 3
   traffic_green_threshold: 3
   traffic_green_timeout: 60.0
+
+
+#     # ROI 범위: 차량 좌표계 기준, 단위는 meters
+#     # min/max는 ROI 박스의 전/후(x) 및 좌/우(y) 경계
+#     # offset_x는 ROI를 전방으로 이동시키는 보정값
+#     min_x: 0.0
+#     max_x: 1.2
+#     min_y: -0.5
+#     max_y: 0.5 #왼쪽
+#     offset_x: 0.7
+#   ultrasonic:
+#     # 초음파 센서 값 전처리 설정
+#     # threshold를 넘는 값만 유효로 판단, unit_scale로 단위 변환
+#     threshold: 800.0
+#     unit_scale: 0.001   # mm -> m
+
+# final_planner:
+#   # 플래너 주기/행동 파라미터 및 임계값
+#   # speed_*는 모터 명령 스케일 기준 (시스템 스케일에 맞춰 조정)
+#   # lc_steer는 차선 변경 시 조향 각도(또는 조향량) 크기
+#   # steer_time은 조향 입력을 유지하는 시간(초)
+#   # straight_time은 조향 복귀 후 직진 유지 시간(초)
+#   # queues_maxlen은 내부 큐 최대 길이(상태/센서 기록 길이)
+#   # *_count_threshold는 이벤트 확정에 필요한 누적 횟수
+#   rate_hz: 20
+#   default_motor: 0
+#   speed_0: 0
+#   speed_mid: 255
+#   speed_high: 255
+#   lc_steer: 22.5
+
+#   steer_time1: 1.6
+#   straight_time1: 0.7
+#   steer_time2: 2.3
+#   straight_time2: 0.0
+#   steer_time3: 0.6

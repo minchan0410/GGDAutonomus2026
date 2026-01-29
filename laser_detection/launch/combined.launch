@@ -21,14 +21,14 @@
     <node name="occ_grid" pkg="laser_detection" type="occ_grid" output="screen" />
       
     <!-- Stanley Controller -->
-    <node name="stanley" pkg="laser_detection" type="stanley.py" output="screen" />
+    <node name="stanley" pkg="parking" type="stanley.py" output="screen" />
     
     <!-- Lane Controller-->
     <node name="run" pkg="lane_detection" type="run.py" output="screen" />
     
     
     <!-- Parking Planner-->
-    <node name="parking" pkg="laser_detection" type="parking.py" output="screen">
+    <node name="parking" pkg="parking" type="parking.py" output="screen">
       <rosparam command='load' file="$(find laser_detection)/config/parking.yaml"/>
     </node>
 	

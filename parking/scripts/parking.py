@@ -473,7 +473,7 @@ class Parking:
     
     def sonic_check(self):
 
-        sonics_to_use1 = [self.ultrasonics[1], self.ultrasonics[3], self.ultrasonics[4], self.ultrasonics[5]]
+        sonics_to_use1 = [self.ultrasonics[1], self.ultrasonics[3], self.ultrasonics[4]]
         sonics_to_use2 = [self.ultrasonics[1], self.ultrasonics[3]]
 
         if self.state == "stanley":
