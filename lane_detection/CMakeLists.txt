@@ -2,7 +2,9 @@ cmake_minimum_required(VERSION 3.0.2)
 project(lane_detection)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
-# add_compile_options(-std=c++11)
+add_compile_options(-std=c++14)
+
+set(OpenCV_DIR "/usr/local/lib/cmake/opencv4")
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -11,10 +13,19 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
   std_msgs
+  sensor_msgs
+  geometry_msgs
+  cv_bridge
+  image_transport
 )
 
 ## System dependencies are found with CMake's conventions
-# find_package(Boost REQUIRED COMPONENTS system)
+find_package(OpenCV REQUIRED)
+
+# message(STATUS ">> OpenCV found: ${OpenCV_FOUND}")
+# message(STATUS ">> OpenCV version: ${OpenCV_VERSION}")
+# message(STATUS ">> OpenCV path: ${OpenCV_DIR}")
+# message(STATUS ">> OpenCV include: ${OpenCV_INCLUDE_DIRS}")
 
 
 ## Uncomment this if the package has a setup.py. This macro ensures
@@ -103,10 +114,7 @@ find_package(catkin REQUIRED COMPONENTS
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-#  INCLUDE_DIRS include
-#  LIBRARIES lane_detection
-#  CATKIN_DEPENDS roscpp rospy std_msgs
-#  DEPENDS system_lib
+  CATKIN_DEPENDS roscpp sensor_msgs std_msgs geometry_msgs cv_bridge image_transport
 )
 
 ###########
@@ -118,6 +126,7 @@ catkin_package(
 include_directories(
 # include
   ${catkin_INCLUDE_DIRS}
+  ${OpenCV_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
@@ -134,6 +143,11 @@ include_directories(
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/lane_detection_node.cpp)
+add_executable(lane_detection src/run2.cpp)
+target_link_libraries(lane_detection
+  ${catkin_LIBRARIES}
+  ${OpenCV_LIBRARIES}
+)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the

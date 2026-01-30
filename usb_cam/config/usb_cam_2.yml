@@ -1,3 +1,4 @@
+# ---------------- FRONT CAM (CAM 1)-------------------- #
 start_service_name: "start_capture" # Defines name suffix for std_srvs::Empty service which restarts suspended streaming
 stop_service_name: "stop_capture"   # Defines name suffix for std_srvs::Empty service which suspends camera polling timer
 
