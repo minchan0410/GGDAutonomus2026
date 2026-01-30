@@ -79,7 +79,7 @@ void callback_hb(const std_msgs::Int16& msg)
   last_hb_ms = millis();
 }
 
-ros::Subscriber<std_msgs::Int16> hb_sub("heartbeat", callback_hb);
+ros::Subscriber<std_msgs::Int16> hb_sub("heart_beat", callback_hb);
 
 /* ===================== Motor cmd callbacks (unchanged) ===================== */
 void callback_long(const std_msgs::Int16& msg)

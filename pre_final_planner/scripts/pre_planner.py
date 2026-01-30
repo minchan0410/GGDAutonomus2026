@@ -93,7 +93,7 @@ class PreFinalPlanner:
 
             # ---- outputs by mode ----
             if mode == "DEFAULT":
-                if not serial_received or not serial_ok:
+                if not self.serial_received or not self.serial_ok:
                     self._log("serial error: keep DEFAULT. reset serial node.", throttle=0.2)
                 des_steer = self.default_steer
                 motor_cmd = self.default_motor
