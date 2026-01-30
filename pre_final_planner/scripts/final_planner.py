@@ -89,6 +89,11 @@ class FinalPlanner:
         # serial readiness gate
         self.serial_timeout_sec = rospy.get_param("~serial_timeout_sec", 0.5)
 
+        # ---- freeze on serial loss (FINAL only) ----
+        self.freeze_on_serial_loss = rospy.get_param("~freeze_on_serial_loss", True)
+        self.frozen = False
+        self.frozen_since = None
+
         # ---- state ----
         self.mode = "DEFAULT"
         self.last_lane_steer = 0
@@ -170,7 +175,7 @@ class FinalPlanner:
             self.traffic_light = val
             if val in (1, 3):
                 self.traffic_queue.append(val)
-    
+
     def crossline_callback(self, msg: Int16):
         val = int(msg.data)
         with self.lock:
@@ -247,7 +252,6 @@ class FinalPlanner:
             return False
         return (rospy.Time.now() - self.serial_last_time).to_sec() <= self.serial_timeout_sec
 
-
     # ---------------- main loop ----------------
     def run(self):
         while not rospy.is_shutdown():
@@ -273,20 +277,36 @@ class FinalPlanner:
 
                 self.last_state = state_local
 
+            # ---- FREEZE behavior (FINAL + serial lost) ----
+            if mode == "FINAL" and self.freeze_on_serial_loss and (not self._serial_ready()):
+                with self.lock:
+                    if not self.frozen:
+                        self.frozen = True
+                        self.frozen_since = rospy.Time.now()
+                rospy.logwarn_throttle(0.5, "[FINAL_PLANNER] SERIAL LOST -> FREEZE (keep state, stop commands)")
+
+                # ---- publish status for viz (EVERY LOOP) ----
+                self.state_pub.publish(String(self.state))
+                self.yolo_crash_pub.publish(Bool(bool(self.yolo_crash)))
+                self.sonic_crash_pub.publish(Bool(bool(self.ultrasonic_crash)))
+                self.reason_pub.publish(String(str(self.lane_change_reason)))
+
+                self.rate.sleep()
+                continue
+
+            # serial recovered -> unfreeze
+            if self.frozen and self._serial_ready():
+                with self.lock:
+                    self.frozen = False
+                    self.frozen_since = None
+                rospy.logwarn("[FINAL_PLANNER] SERIAL RECOVERED -> RESUME")
+
             # ---- planner logic ----
             if mode == "DEFAULT":
                 self._log(error=not self._serial_ready())
                 self.drive(0, self.default_motor)
 
             elif mode == "FINAL":
-                # serial lost -> force DEFAULT
-                if not self._serial_ready():
-                    with self.lock:
-                        self.mode = "DEFAULT"
-                    self._log(error=True)
-                    self.drive(0, self.default_motor)
-                    self.rate.sleep()
-                    continue
                 # lane driving
                 if self.state == "lane_driving":
                     self.lane_change_reason = "none"
@@ -347,16 +367,15 @@ class FinalPlanner:
                             self.state = "crossline"
                             self.lc_start_time = None
 
-
                 if self.state == "crossline":
-                    if self.crossline == 1: #횡단보도 정지. 
+                    if self.crossline == 1:  # 횡단보도 정지.
                         self.drive(lane_steer, self.SPEED_0)
                         self.traffic_queue.clear()
                         self.traffic_start_time = rospy.Time.now()
                         self.state = "traffic"
                     else:
                         self.drive(lane_steer, self.SPEED_MID)
-                
+
                 # traffic
                 if self.state == "traffic":
                     with self.lock:
@@ -369,8 +388,6 @@ class FinalPlanner:
                             self.traffic_start_time = None
                         else:
                             self.drive(lane_steer, self.SPEED_0)
-
-
 
             # ---- publish status for viz (EVERY LOOP) ----
             # NOTE: crash bool은 "현재 상태"를 그대로 publish.
