@@ -24,6 +24,8 @@ final_planner:
   # *_count_threshold는 이벤트 확정에 필요한 누적 횟수
   rate_hz: 20
   default_motor: 0
+  # 시작 후 일정 시간 동안 상태 변경(차선 변경 트리거) 무시
+  state_change_delay_sec: 0.0
   speed_0: 0
   speed_mid: 255
   speed_high: 255

@@ -56,6 +56,7 @@ class FinalPlanner:
         th = threading.Thread(target=self.keyboard_listener, daemon=True)
         th.start()
         self.rate = rospy.Rate(self.rate_hz)
+        self.node_start_time = rospy.Time.now()
 
         # ---- params ----
         self.roi_min_x = rospy.get_param("planner_common/roi/min_x", ROI_MIN_X)
@@ -83,6 +84,8 @@ class FinalPlanner:
 
         self.traffic_green_threshold = rospy.get_param("~traffic_green_threshold", 5)
         self.traffic_green_timeout = rospy.get_param("~traffic_green_timeout", 20.0)
+        # startup guard: block state changes for a few seconds
+        self.state_change_delay_sec = rospy.get_param("~state_change_delay_sec", 0.0)
 
         # ---- state ----
         self.mode = "DEFAULT"
@@ -120,6 +123,8 @@ class FinalPlanner:
 
     # ---------------- callbacks ----------------
     def ultrasonic1_callback(self, msg: Int16):
+        if self._startup_blocked():
+            return
         if msg.data == -1:
             self.ultrasonic_queue.append(float('inf'))
         else:
@@ -132,6 +137,8 @@ class FinalPlanner:
     def car_projected_callback(self, msg: PointStamped):
         # ✅ FIX: init 중 콜백이 먼저 들어오면 yolo_queue가 아직 없을 수 있음
         if not hasattr(self, "yolo_queue"):
+            return
+        if self._startup_blocked():
             return
 
         x = msg.point.x
@@ -222,6 +229,11 @@ class FinalPlanner:
         self.state = target_state
         self.lane_change_reason = self._compute_reason()
 
+    def _startup_blocked(self) -> bool:
+        if self.state_change_delay_sec <= 0.0:
+            return False
+        return (rospy.Time.now() - self.node_start_time).to_sec() < self.state_change_delay_sec
+
 
     # ---------------- main loop ----------------
     def run(self):
@@ -262,7 +274,7 @@ class FinalPlanner:
                     self.drive(lane_steer, self.SPEED_HIGH)
 
                     # crash triggers -> lane change
-                    if self.ultrasonic_crash or self.yolo_crash:
+                    if (self.ultrasonic_crash or self.yolo_crash) and (not self._startup_blocked()):
                         with self.lock:
                             self._enter_lane_change("lane_change")
 
