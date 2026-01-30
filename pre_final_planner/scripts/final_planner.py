@@ -39,6 +39,7 @@ class FinalPlanner:
         rospy.Subscriber("/car_projected", PointStamped, self.car_projected_callback, queue_size=1)
         rospy.Subscriber("/traffic", Int16, self.traffic_callback, queue_size=1)
         rospy.Subscriber("/crossline", Int16, self.crossline_callback, queue_size=1)
+        rospy.Subscriber("/rosserial_check", Int16, self.serial_check_callback, queue_size=1)
 
         # ---- pubs (actuation) ----
         self.motor_cmd_steer_pub = rospy.Publisher("/des_steer", Int16, queue_size=1)
@@ -112,6 +113,9 @@ class FinalPlanner:
 
         self.crossline = False
         self.traffic_stop = False
+
+        self.serial_ok = False
+        self.serial_received = False
         self.run()
 
     # ---------------- callbacks ----------------
@@ -165,19 +169,37 @@ class FinalPlanner:
             else:
                 self.crossline = False
 
+    def serial_check_callback(self, msg: Int16):
+        val = int(msg.data)
+        with self.lock:
+            self.serial_received = True
+            self.serial_ok = (val == 0)
+
     # ---------------- keyboard ----------------
+    def _log(self, msg: str, throttle=None):
+        serial_txt = "Serial OK" if self.serial_ok else "Serial ERR"
+        state_txt = self.state
+        line = f"[FINAL_PLANNER] | {serial_txt:<11} | State = {state_txt:<12} | {msg}"
+        if throttle is None:
+            rospy.loginfo(line)
+        else:
+            rospy.loginfo_throttle(throttle, line)
+
     def keyboard_listener(self):
         while not rospy.is_shutdown():
             key = input().strip().lower()
             with self.lock:
                 if key == "d":
                     self.mode = "DEFAULT"
-                    rospy.loginfo("-> DEFAULT")
+                    self._log("-> DEFAULT")
                 elif key == "f":
-                    self.mode = "FINAL"
-                    rospy.loginfo("-> FINAL")
+                    if self.serial_ok:
+                        self.mode = "FINAL"
+                        self._log("-> FINAL")
+                    else:
+                        self._log("SERIAL ERROR!!!!!!!!!!!!!!!!!!!")
                 else:
-                    rospy.logwarn("invalid key")
+                    self._log("invalid key")
 
     # ---------------- helper: reason latch ----------------
     def _compute_reason(self) -> str:
@@ -214,20 +236,22 @@ class FinalPlanner:
             # log state transitions
             if state_local != self.last_state:
                 if state_local == "lane_driving":
-                    rospy.loginfo("[lane_driving]")
+                    self._log("[lane_driving]")
                 elif state_local == "lane_change":
-                    rospy.loginfo("[lane change]")
+                    self._log("[lane change]")
                 elif state_local == "crossline":
-                    rospy.loginfo("[crossline]")
+                    self._log("[crossline]")
                 elif state_local == "traffic":
-                    rospy.loginfo("[traffic]")
+                    self._log("[traffic]")
                 else:
-                    rospy.loginfo("[state: %s]" % state_local)
+                    self._log("[state: %s]" % state_local)
 
                 self.last_state = state_local
 
             # ---- planner logic ----
             if mode == "DEFAULT":
+                if not serial_received or not serial_ok:
+                    self._log("serial error: keep DEFAULT. reset serial node.", throttle=0.2)
                 self.drive(0, self.default_motor)
 
             elif mode == "FINAL":

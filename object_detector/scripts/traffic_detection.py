@@ -32,7 +32,7 @@ class TrafficDetectionNode:
 
         # [추가] 결과 스무딩을 위한 큐 설정
         # 큐의 길이가 길수록 안정적이지만 반응 속도가 느려집니다. (예: 30fps 기준 10~15 추천)
-        self.queue_len = int(rospy.get_param("~queue_len", 10))
+        self.queue_len = int(rospy.get_param("~queue_len", 3))
         self.result_queue = deque(maxlen=self.queue_len)
 
         # 2. YOLO 파라미터 & 클래스 ID
