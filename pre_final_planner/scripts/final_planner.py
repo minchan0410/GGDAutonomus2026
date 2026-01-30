@@ -187,21 +187,14 @@ class FinalPlanner:
             self.serial_last_time = rospy.Time.now()
 
     # ---------------- keyboard ----------------
-    def _log(self, error=False, throttle=None):
-        serial_txt = "Serial OK" if self.serial_ok else "Serial ERROR"
-        state_txt = self.state
-        tail = "ERROR" if error else ""
-        line = f"[FINAL_PLANNER] | {serial_txt:<11} | State = {state_txt:<12} | {tail}"
-        if throttle is None:
-            if error:
-                rospy.logwarn(line)
-            else:
-                rospy.loginfo(line)
+    def _log(self, error=False, throttle=0.5):
+        serial_txt = "SERIAL OK" if self._serial_ready() else "SERIAL ERROR"
+        state_txt = self.state.lower()
+        line = f"[FINAL_PLANNER] | {serial_txt} | State = {state_txt}"
+        if error:
+            rospy.logwarn_throttle(throttle, line)
         else:
-            if error:
-                rospy.logwarn_throttle(throttle, line)
-            else:
-                rospy.loginfo_throttle(throttle, line)
+            rospy.loginfo_throttle(throttle, line)
 
     def keyboard_listener(self):
         while not rospy.is_shutdown():
@@ -282,8 +275,7 @@ class FinalPlanner:
 
             # ---- planner logic ----
             if mode == "DEFAULT":
-                if not self._serial_ready():
-                    self._log(error=True, throttle=0.2)
+                self._log(error=not self._serial_ready())
                 self.drive(0, self.default_motor)
 
             elif mode == "FINAL":
@@ -291,7 +283,7 @@ class FinalPlanner:
                 if not self._serial_ready():
                     with self.lock:
                         self.mode = "DEFAULT"
-                    self._log(error=True, throttle=0.2)
+                    self._log(error=True)
                     self.drive(0, self.default_motor)
                     self.rate.sleep()
                     continue
