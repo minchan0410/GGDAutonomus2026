@@ -189,7 +189,7 @@ class FinalPlanner:
     # ---------------- keyboard ----------------
     def _log(self, error=False, throttle=0.5):
         serial_txt = "SERIAL OK" if self._serial_ready() else "SERIAL ERROR"
-        state_txt = self.state.lower()
+        state_txt = "default" if self.mode == "DEFAULT" else self.state.lower()
         line = f"[FINAL_PLANNER] | {serial_txt} | State = {state_txt}"
         if error:
             rospy.logwarn_throttle(throttle, line)
