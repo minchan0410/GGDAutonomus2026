@@ -86,6 +86,8 @@ class FinalPlanner:
         self.traffic_green_timeout = rospy.get_param("~traffic_green_timeout", 20.0)
         # startup guard: block state changes for a few seconds
         self.state_change_delay_sec = rospy.get_param("~state_change_delay_sec", 0.0)
+        # serial readiness gate
+        self.serial_timeout_sec = rospy.get_param("~serial_timeout_sec", 0.5)
 
         # ---- state ----
         self.mode = "DEFAULT"
@@ -119,6 +121,7 @@ class FinalPlanner:
 
         self.serial_ok = False
         self.serial_received = False
+        self.serial_last_time = None
         self.run()
 
     # ---------------- callbacks ----------------
@@ -181,16 +184,24 @@ class FinalPlanner:
         with self.lock:
             self.serial_received = True
             self.serial_ok = (val == 0)
+            self.serial_last_time = rospy.Time.now()
 
     # ---------------- keyboard ----------------
-    def _log(self, msg: str, throttle=None):
-        serial_txt = "Serial OK" if self.serial_ok else "Serial ERR"
+    def _log(self, error=False, throttle=None):
+        serial_txt = "Serial OK" if self.serial_ok else "Serial ERROR"
         state_txt = self.state
-        line = f"[FINAL_PLANNER] | {serial_txt:<11} | State = {state_txt:<12} | {msg}"
+        tail = "ERROR" if error else ""
+        line = f"[FINAL_PLANNER] | {serial_txt:<11} | State = {state_txt:<12} | {tail}"
         if throttle is None:
-            rospy.loginfo(line)
+            if error:
+                rospy.logwarn(line)
+            else:
+                rospy.loginfo(line)
         else:
-            rospy.loginfo_throttle(throttle, line)
+            if error:
+                rospy.logwarn_throttle(throttle, line)
+            else:
+                rospy.loginfo_throttle(throttle, line)
 
     def keyboard_listener(self):
         while not rospy.is_shutdown():
@@ -198,15 +209,15 @@ class FinalPlanner:
             with self.lock:
                 if key == "d":
                     self.mode = "DEFAULT"
-                    self._log("-> DEFAULT")
+                    self._log()
                 elif key == "f":
-                    if self.serial_ok:
+                    if self._serial_ready():
                         self.mode = "FINAL"
-                        self._log("-> FINAL")
+                        self._log()
                     else:
-                        self._log("SERIAL ERROR!!!!!!!!!!!!!!!!!!!")
+                        self._log(error=True)
                 else:
-                    self._log("invalid key")
+                    self._log()
 
     # ---------------- helper: reason latch ----------------
     def _compute_reason(self) -> str:
@@ -234,6 +245,15 @@ class FinalPlanner:
             return False
         return (rospy.Time.now() - self.node_start_time).to_sec() < self.state_change_delay_sec
 
+    def _serial_ready(self) -> bool:
+        if not self.serial_received or not self.serial_ok:
+            return False
+        if self.serial_timeout_sec <= 0.0:
+            return True
+        if self.serial_last_time is None:
+            return False
+        return (rospy.Time.now() - self.serial_last_time).to_sec() <= self.serial_timeout_sec
+
 
     # ---------------- main loop ----------------
     def run(self):
@@ -248,25 +268,33 @@ class FinalPlanner:
             # log state transitions
             if state_local != self.last_state:
                 if state_local == "lane_driving":
-                    self._log("[lane_driving]")
+                    self._log()
                 elif state_local == "lane_change":
-                    self._log("[lane change]")
+                    self._log()
                 elif state_local == "crossline":
-                    self._log("[crossline]")
+                    self._log()
                 elif state_local == "traffic":
-                    self._log("[traffic]")
+                    self._log()
                 else:
-                    self._log("[state: %s]" % state_local)
+                    self._log()
 
                 self.last_state = state_local
 
             # ---- planner logic ----
             if mode == "DEFAULT":
-                if not self.serial_received or not self.serial_ok:
-                    self._log("serial error: keep DEFAULT. reset serial node.", throttle=0.2)
+                if not self._serial_ready():
+                    self._log(error=True, throttle=0.2)
                 self.drive(0, self.default_motor)
 
             elif mode == "FINAL":
+                # serial lost -> force DEFAULT
+                if not self._serial_ready():
+                    with self.lock:
+                        self.mode = "DEFAULT"
+                    self._log(error=True, throttle=0.2)
+                    self.drive(0, self.default_motor)
+                    self.rate.sleep()
+                    continue
                 # lane driving
                 if self.state == "lane_driving":
                     self.lane_change_reason = "none"

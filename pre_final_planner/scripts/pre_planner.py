@@ -15,6 +15,7 @@ class PreFinalPlanner:
         self.pre_motor_cmd = int(rospy.get_param("~pre_motor_cmd_long", 255))
         self.default_steer = int(rospy.get_param("~default_steer", 0))
         self.default_motor = int(rospy.get_param("~default_motor_cmd_long", 0))
+        self.serial_timeout_sec = 0.5
 
         # ---- state ----
         self.mode = "d"  # 'd'|'p'|'f'
@@ -23,6 +24,7 @@ class PreFinalPlanner:
         self.lock = threading.Lock()
         self.serial_ok = False
         self.serial_received = False
+        self.serial_last_time = None
 
         # ---- pubs/subs ----
         self.sub_lane = rospy.Subscriber("/lane_steer", Int16, self.cb_lane_steer, queue_size=1)
@@ -34,8 +36,8 @@ class PreFinalPlanner:
         th = threading.Thread(target=self.keyboard_loop, daemon=True)
         th.start()
 
-        self._log("started. mode=d (default)")
-        self._log("Type: d (default) / p (pre)")
+        self._log()
+        self._log()
 
     def cb_lane_steer(self, msg: Int16):
         with self.lock:
@@ -47,15 +49,32 @@ class PreFinalPlanner:
         with self.lock:
             self.serial_received = True
             self.serial_ok = (val == 0)
+            self.serial_last_time = rospy.Time.now()
 
-    def _log(self, msg: str, throttle=None):
+    def _serial_ready(self) -> bool:
+        if not self.serial_received or not self.serial_ok:
+            return False
+        if self.serial_timeout_sec <= 0.0:
+            return True
+        if self.serial_last_time is None:
+            return False
+        return (rospy.Time.now() - self.serial_last_time).to_sec() <= self.serial_timeout_sec
+
+    def _log(self, error=False, throttle=None):
         serial_txt = "Serial OK" if self.serial_ok else "Serial ERR"
         state_txt = self.mode
-        line = f"[PRE_FINAL_PLANNER] | {serial_txt:<11} | State = {state_txt:<12} | {msg}"
+        tail = "ERROR" if error else ""
+        line = f"[PRE_FINAL_PLANNER] | {serial_txt:<11} | State = {state_txt:<12} | {tail}"
         if throttle is None:
-            rospy.loginfo(line)
+            if error:
+                rospy.logwarn(line)
+            else:
+                rospy.loginfo(line)
         else:
-            rospy.loginfo_throttle(throttle, line)
+            if error:
+                rospy.logwarn_throttle(throttle, line)
+            else:
+                rospy.loginfo_throttle(throttle, line)
 
     def keyboard_loop(self):
         key_to_mode = {
@@ -70,17 +89,17 @@ class PreFinalPlanner:
 
             cmd = line.strip().lower()
             if cmd not in key_to_mode:
-                self._log("invalid key inturrupt")
+                self._log()
                 continue
 
             new_mode = key_to_mode[cmd]
             with self.lock:
                 if self.mode != new_mode:
-                    if new_mode == "PRE" and not self.serial_ok:
-                        self._log("SERIAL ERROR!!!!!!!!!!!!!!!!!!!")
+                    if new_mode == "PRE" and not self._serial_ready():
+                        self._log(error=True)
                         continue
                     self.mode = new_mode
-                    self._log(f'set to mode "{new_mode}"')
+                    self._log()
 
 
     def run(self):
@@ -93,15 +112,22 @@ class PreFinalPlanner:
 
             # ---- outputs by mode ----
             if mode == "DEFAULT":
-                if not self.serial_received or not self.serial_ok:
-                    self._log("serial error: keep DEFAULT. reset serial node.", throttle=0.2)
+                if not self._serial_ready():
+                    self._log(error=True, throttle=0.2)
                 des_steer = self.default_steer
                 motor_cmd = self.default_motor
 
             elif mode == "PRE":
-                # pre: lane_steer 패스스루 + 모터 상수로 힘
-                des_steer = lane_steer
-                motor_cmd = self.pre_motor_cmd
+                if not self._serial_ready():
+                    with self.lock:
+                        self.mode = "DEFAULT"
+                    self._log(error=True, throttle=0.2)
+                    des_steer = self.default_steer
+                    motor_cmd = self.default_motor
+                else:
+                    # pre: lane_steer 패스스루 + 모터 상수로 힘
+                    des_steer = lane_steer
+                    motor_cmd = self.pre_motor_cmd
 
             else:
                 # safety fallback
