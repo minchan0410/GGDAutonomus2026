@@ -48,7 +48,7 @@ class Rosserial_checker:
         self.last_time_pot = now
         self.msg_count_pot += 1
 
-        rospy.loginfo(f"[POT] value: {msg.data}, dt: {dt:.4f}s")
+        rospy.loginfo_throttle(0.5, f"[POT] dt: {dt:.4f}s")
 
     # ultrasonic callback (topic별로 동일 콜백 사용)
     def cb_ultra(self, msg, topic):
@@ -63,7 +63,7 @@ class Rosserial_checker:
         state["last_time"] = now
         state["count"] += 1
 
-        rospy.loginfo(f"[ULTRA {topic}] value: {msg.data}, dt: {dt:.4f}s")
+        rospy.loginfo_throttle(0.5, f"[ULTRA {topic}] dt: {dt:.4f}s")
 
     def monitor_loop(self):
         rate = rospy.Rate(50)  # 50Hz 감시 루프
