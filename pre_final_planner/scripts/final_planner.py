@@ -250,7 +250,7 @@ class FinalPlanner:
 
             # ---- planner logic ----
             if mode == "DEFAULT":
-                if not serial_received or not serial_ok:
+                if not self.serial_received or not self.serial_ok:
                     self._log("serial error: keep DEFAULT. reset serial node.", throttle=0.2)
                 self.drive(0, self.default_motor)
 
