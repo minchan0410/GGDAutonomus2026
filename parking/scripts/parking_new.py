@@ -24,6 +24,8 @@ class Parking:
         rospy.Subscriber("/detection_poses",PoseArray,self.detection_poses_callback,queue_size=1)
         rospy.Subscriber("/parking_lane_steer", Int16, self.lane_steer_callback, queue_size=1)
         rospy.Subscriber("/parking_stanley_steer", Int16, self.stanley_steer_callback, queue_size=1)
+        rospy.Subscriber("/rosserial_check", Int16, self.rosserial_check_callback, queue_size=1)
+        
         
         self.motor_cmd_steer_pub = rospy.Publisher("/des_steer", Int16, queue_size=1)
         self.motor_long_pub = rospy.Publisher("/motor_cmd_long", Int16, queue_size=1)
@@ -63,9 +65,11 @@ class Parking:
         self.pulled_out          = False
         self.to_finish           = False
         
-        self.both_updated = False
-        self.lost_second  = False
-        self.lost_first   = False
+        self.first_updated  = False
+        self.second_updated = False
+        self.both_updated   = False
+        self.lost_second    = False
+        self.lost_first     = False
         # ========================================
         
         
@@ -76,6 +80,19 @@ class Parking:
         self.state          = None
         self.prev_state     = None
         self.can_park_TH    = None
+        # ========================================
+        
+        # ========================================
+        # --------------------freeze--------------
+        self.freeze_on_serial_loss = rospy.get_param("~freeze_on_serial_loss", True)
+        self.frozen                = False
+        self.frozen_since          = None
+        self.ross                  = 0
+        self.serial_ok             = True  # rosserial_check == 0 이면 OK
+        self.serial_ok_streak      = 0     # 0 연속 카운트
+        self.serial_bad_streak     = 0     # 1 연속 카운트
+        self.SERIAL_OK_TICKS       = 20
+        self.SERIAL_BAD_TICKS      = 4
         # ========================================
         
         
@@ -102,9 +119,28 @@ class Parking:
         # ====================================================================================================
         
     def run(self):
-        
         while not rospy.is_shutdown():
+            if not self.serial_ok:
+                rospy.logerr_throttle(0.5, "시리얼 터짐")
+            # =======================
+            # FREEZE / RESUME handling
+            # =======================
+            # resume 체크는 항상 먼저(이미 frozen인데 회복된 경우)
+            self._resume_if_needed()
 
+            # freeze 조건이면: state 진행 멈추고 차량 정지 명령만 유지
+            if self._should_freeze():
+                self._enter_freeze_if_needed()
+
+                # ★ 중요: 마지막 명령 유지 방지 -> 계속 0 보내기
+                self.drive(0, 0)
+
+                # 디버그는 계속 보고 싶으면 유지
+                self.publish_debug_text()
+
+                self.rate.sleep()
+                continue
+            
             if self.mode == "DEFAULT":
                 self.drive(0,0)
 
@@ -206,6 +242,28 @@ class Parking:
             "back_len": 2.0, "front_len": 5.0, "step": 0.1, "frame_id": "laser"
         })
 
+    def rosserial_check_callback(self, msg):
+        v = int(msg.data)
+        self.ross = v
+
+        # 0 -> OK 후보
+        if v == 0:
+            self.serial_ok_streak += 1
+            self.serial_bad_streak = 0
+
+            if (not self.serial_ok) and (self.serial_ok_streak >= self.SERIAL_OK_TICKS):
+                self.serial_ok = True
+                rospy.logwarn(f"[PARKING] ROSSerial OK confirmed ({self.serial_ok_streak} ticks)")
+
+        # 1 -> BAD 후보
+        else:
+            self.serial_bad_streak += 1
+            self.serial_ok_streak = 0
+
+            if self.serial_ok and (self.serial_bad_streak >= self.SERIAL_BAD_TICKS):
+                self.serial_ok = False
+                rospy.logwarn(f"[PARKING] ROSSerial BAD confirmed ({self.serial_bad_streak} ticks)")
+
     def keyboard_listener(self):
         """
         d : DEFAULT (무조건 정지, state 저장)
@@ -241,26 +299,22 @@ class Parking:
                 elif key == "f":
                     if self.mode != "FINAL":
                         self.mode = "FINAL"
-
-                        # DEFAULT에서 복귀하는 경우
                         if self.prev_state is not None:
                             self.state = self.prev_state
-                            rospy.loginfo(
-                                f"-> FINAL (resume state: {self.state})"
-                            )
+                            rospy.loginfo(f"-> FINAL (resume state: {self.state})")
                         else:
-                            # 최초 FINAL 진입
                             self.state = "lane_driving"
-                            rospy.loginfo(
-                                "-> FINAL (start lane_driving)"
-                            )
-
+                            rospy.loginfo("-> FINAL (start lane_driving)")
                     else:
                         rospy.loginfo("already in FINAL")
 
+                    if not self.serial_ok:
+                        rospy.logwarn("[PARKING] SERIAL ERROR (will freeze)")
+                        
+
                 else:
                     rospy.logwarn("invalid key (use 'd' or 'f')")
-                      
+                
     def lane_steer_callback(self, msg): self.lane_steer = msg.data
     
     def stanley_steer_callback(self, msg): self.stanley_steer = msg.data
@@ -293,7 +347,10 @@ class Parking:
             self.ultrasonics[5] = msg.data
 
     def detection_poses_callback(self, msg):
-            
+        
+        if self.frozen:
+            return
+        
         points = np.array([[pose.position.x, pose.position.y] for pose in msg.poses],dtype=float)
 
         self.first_updated = False
@@ -394,7 +451,7 @@ class Parking:
                 rospy.loginfo_throttle(0.5,f"first car updated, dist: {min_dist:.2f}")
             return True
         else:
-            rospy.logerr_once(f"!!!! first car update false !!! dist: {min_dist:.2f}")
+            rospy.logwarn(f"!!!! first car update false !!! dist: {min_dist:.2f}")
             self.first_car_detected = False
             self.lost_first = True
             return False
@@ -422,7 +479,7 @@ class Parking:
                 rospy.loginfo_throttle(0.5,f"second car updated, dist: {min_dist:.2f}")
             return True
         else:
-            rospy.logerr_once(f"!!!! second car update false !!! dist: {min_dist:.2f}")
+            rospy.logwarn(f"!!!! second car update false !!! dist: {min_dist:.2f}")
             self.second_car_detected = False
             self.lost_second = True
             return False
@@ -499,8 +556,34 @@ class Parking:
             angles = np.arctan2(dy, dx)
             angle_mask = (angles >= -ang) & (angles <= ang)
 
-            return point[dist_mask & angle_mask]
-            
+            return point[dist_mask & angle_mask]  
+    
+    def _should_freeze(self):
+        # FINAL에서만 freeze 걸자 (DEFAULT는 원래 정지니까)
+        return (self.mode == "FINAL"
+                and self.freeze_on_serial_loss
+                and (not self.serial_ok))
+
+    def _enter_freeze_if_needed(self):
+        if not self.frozen:
+            self.frozen = True
+            self.frozen_since = rospy.Time.now()
+            rospy.logwarn("[PARKING] SERIAL LOST -> FREEZE (hold state, stop commands)")
+
+    def _resume_if_needed(self):
+        # frozen 상태인데 serial이 회복되었으면 resume
+        if self.frozen and self.serial_ok:
+            dt = (rospy.Time.now() - self.frozen_since).to_sec() if self.frozen_since else 0.0
+            self.frozen = False
+            self.frozen_since = None
+
+            # ★ 타이머 보정: start_time을 쓰는 state에서만 보정하면 됨
+            #   (start_time이 None이면 할 거 없음)
+            if self.start_time is not None:
+                self.start_time = self.start_time + rospy.Duration.from_sec(dt)
+
+            rospy.logwarn(f"[PARKING] SERIAL RECOVERED -> RESUME (pause dt={dt:.3f}s)")
+
     def drive(self, des_steer, long_cmd):
 
         # steer source 판별
@@ -537,7 +620,6 @@ class Parking:
             else:
                 self.pulled_streak = max(0, self.pulled_streak - 1)
                 
-
     def stanley_path(self, filtered_points):
         
         if not self.both_updated:
@@ -900,6 +982,7 @@ class Parking:
             if np.any(np.isnan(p)):
                 return "(NaN, NaN)"
             return f"({p[0]:+.2f}, {p[1]:+.2f})"
+        serial_text = "OK" if self.serial_ok == True else "WARNING!!"
         text = (
             f"[ PARKING DEBUG ]\n\n"
             f"STATE : {self.state}\n\n"
@@ -917,8 +1000,8 @@ class Parking:
             f"left rear   : {self.ultrasonics[4]}\n"
             f"right rear   : {self.ultrasonics[5]}\n"
             f"threshold   : {self.ULTRASONIC_THRESHOLD}\n"
-            f"steak   : {self.parked_streak}\n"
-
+            f"steak   : {self.parked_streak}\n\n"
+            f"rosserial   : {serial_text}\n"
         )
 
         msg = OverlayText()
@@ -935,11 +1018,14 @@ class Parking:
         if self.first_updated and self.second_updated:
             msg.fg_color = ColorRGBA(0.2, 0.6, 1.0, 1.0)  # 파랑
         else:
+            msg.fg_color = ColorRGBA(1.0, 0.5, 0.0, 1.0)  # 주황
+            
+        if not self.serial_ok:
             msg.fg_color = ColorRGBA(1.0, 0.2, 0.2, 1.0)  # 빨강
+            
         msg.bg_color = ColorRGBA(0.0, 0.0, 0.0, 0.0)
 
         self.debug_text_pub.publish(msg)
-
 
     # 화면 고정 텍스트(TEXT_VIEW_FACING): 현재 STATE, 각 차 인지/업데이트 여부, 좌표, steer source, can_park_TH 같은 디버그 상태판
 
