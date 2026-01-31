@@ -27,21 +27,38 @@ class Stanley:
         
         
     def cb_path(self, msg: Path):
-        
+
         if not msg.poses:
             self.path = None
             self.clear_stanley_markers()
-            self.steer_pub.publish(Int16(int(0)))
+            self.steer_pub.publish(Int16(0))
             rospy.logwarn_throttle(1.0, "Stanley path invalid → clearing RViz markers")
             return
 
         self.path_yaw = self.get_path_yaw(msg)
+
+        # ===== 추가: yaw NaN 방어 =====
+        if not np.isfinite(self.path_yaw):
+            rospy.logwarn_throttle(1.0, "[STANLEY] path_yaw is NaN → ignore path")
+            self.path = None
+            self.steer_pub.publish(Int16(0))
+            return
+        # ==============================
+
         path = np.array(
             [[p.pose.position.x, p.pose.position.y] for p in msg.poses],
             dtype=float
         )
 
-        # path 방향 정렬
+        # ===== 추가: path NaN 방어 =====
+        if not np.all(np.isfinite(path)):
+            rospy.logwarn_throttle(1.0, "[STANLEY] path contains NaN → ignore")
+            self.path = None
+            self.steer_pub.publish(Int16(0))
+            return
+        # ==============================
+
+        # 기존 로직 그대로
         dir_pts = path[-1] - path[0]
         dir_yaw = np.array([math.cos(self.path_yaw), math.sin(self.path_yaw)])
         if np.dot(dir_pts, dir_yaw) < 0:
@@ -51,7 +68,9 @@ class Stanley:
         self.stanley()
 
 
+
     def stanley(self):
+        
         if self.path is None:
             return
         motion_yaw = math.pi
@@ -97,6 +116,17 @@ class Stanley:
         """
         
         steer = (- k_h * heading_error+ k_l * math.atan2(K * lateral_error, V))
+        
+        invalid = (
+            not np.isfinite(lateral_error) or
+            not np.isfinite(heading_error) or
+            not np.isfinite(steer)
+        )
+        
+        if invalid:
+            rospy.logwarn_throttle(1.0, "[STANLEY] NaN detected → steer=0 (debug kept)")
+            steer = 0.0
+            
         MAX_STEER_RAD = math.radians(22.5)
         steer = max(min(steer, MAX_STEER_RAD), -MAX_STEER_RAD)
         self.steer_pub.publish(Int16(int(math.degrees(steer))))

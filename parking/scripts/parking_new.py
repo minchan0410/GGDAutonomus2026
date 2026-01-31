@@ -452,6 +452,7 @@ class Parking:
             return True
         else:
             rospy.logwarn(f"!!!! first car update false !!! dist: {min_dist:.2f}")
+            
             self.first_car_detected = False
             self.lost_first = True
             return False
