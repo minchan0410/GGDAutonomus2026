@@ -4,7 +4,7 @@ planner_common:
     # min/max는 ROI 박스의 전/후(x) 및 좌/우(y) 경계
     # offset_x는 ROI를 전방으로 이동시키는 보정값
     offset_x: 0.7
-    radius: 1.0
+    radius: 1.2
   ultrasonic:
     # 초음파 센서 값 전처리 설정
     # threshold를 넘는 값만 유효로 판단, unit_scale로 단위 변환
@@ -32,7 +32,7 @@ final_planner:
   speed_high: 255
   lc_steer: 22.5
 
-  steer_time1: 2.3
+  steer_time1: 5.0 #2.3
   straight_time1: 1.5
   steer_time2: 1.8
   straight_time2: 0.0

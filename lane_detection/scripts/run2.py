@@ -321,7 +321,7 @@ class LaneDetector:
         
         filtered_midpoint = int(sum(self.steer_history) / len(self.steer_history)) if self.steer_history else final_midpoint
         
-        pubdata = int(-(filtered_midpoint - image_center_x) * 0.2 )
+        pubdata = int(-(filtered_midpoint - image_center_x) * 0.18 )
         self.pub_steer.publish(Int16(pubdata))
 
         # 7. Publish & Vis
@@ -346,8 +346,8 @@ class LaneDetector:
         # ========================================================
         # [NEW] ROI 내 대칭 세로선 그리기 (Guide Lines)
         # ========================================================
-        guide_offset_top = 150    # 상단 중심 거리 (멀리 있는 도로 폭, 좁게 설정)
-        guide_offset_bottom = 270 # 하단 중심 거리 (가까이 있는 도로 폭, 넓게 설정)
+        guide_offset_top = 145    # 상단 중심 거리 (멀리 있는 도로 폭, 좁게 설정)
+        guide_offset_bottom = 275 # 하단 중심 거리 (가까이 있는 도로 폭, 넓게 설정)
         
         # 왼쪽 가이드라인: (Top Left) -> (Bottom Left)
         # 식: (cx - top_offset, y_top) -> (cx - bottom_offset, h)
