@@ -5,9 +5,10 @@ import rospy
 from std_msgs.msg import String, Bool, Int16
 from visualization_msgs.msg import Marker, MarkerArray
 from jsk_rviz_plugins.msg import OverlayText
-
+import math
 # NOTE: ColorRGBA is inside std_msgs, but OverlayText uses it as a field type
 from std_msgs.msg import ColorRGBA
+from geometry_msgs.msg import PointStamped, Point
 
 
 def _rgba_msg(r, g, b, a):
@@ -46,6 +47,7 @@ class FinalPlannerRviz:
         self.roi_min_y = float(rospy.get_param("planner_common/roi/min_y", -0.4))
         self.roi_max_y = float(rospy.get_param("planner_common/roi/max_y", 0.4))
         self.roi_offset_x = float(rospy.get_param("planner_common/roi/offset_x", 0.74))
+        self.roi_radius = float(rospy.get_param("planner_common/roi/radius", 1.0))
         self.roi_z = float(rospy.get_param("~roi/z", 0.05))
         self.roi_thickness = float(rospy.get_param("~roi/thickness", 0.02))
         self.roi_alpha = float(rospy.get_param("~roi/alpha", 0.25))
@@ -99,6 +101,7 @@ class FinalPlannerRviz:
         self.yolo_crash = False
         self.sonic_crash = False
         self.reason = "none"
+        self.yolo_crash_point = None
 
         # lane-change latch for orange 유지
         self.prev_state = None
@@ -120,6 +123,7 @@ class FinalPlannerRviz:
         rospy.Subscriber("/final_planner/yolo_crash", Bool, self.cb_yolo, queue_size=1)
         rospy.Subscriber("/final_planner/sonic_crash", Bool, self.cb_sonic, queue_size=1)
         rospy.Subscriber("/final_planner/lane_change_reason", String, self.cb_reason, queue_size=1)
+        rospy.Subscriber("/final_planner/yolo_crash_point", PointStamped, self.cb_yolo_crash_point, queue_size=1)
         rospy.Subscriber("/ultrasonic1", Int16, self.cb_ultrasonic_raw, queue_size=1)
 
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.publish_rate), self.on_timer)
@@ -142,6 +146,9 @@ class FinalPlannerRviz:
 
     def cb_ultrasonic_raw(self, msg: Int16):
         self.ultrasonic_raw = int(msg.data)
+
+    def cb_yolo_crash_point(self, msg: PointStamped):
+        self.yolo_crash_point = msg
 
     # ---- internal ----
     @staticmethod
@@ -184,19 +191,32 @@ class FinalPlannerRviz:
         return m
 
     def _roi_marker(self, orange: bool) -> Marker:
-        m = self._make_marker(self.base_frame, "final_planner", 0, Marker.CUBE)
+        # LINE_STRIP으로 반원 ROI 표시
+        m = self._make_marker(self.base_frame, "final_planner", 0, Marker.LINE_STRIP)
 
-        cx = self.roi_offset_x + (self.roi_min_x + self.roi_max_x) * 0.5
-        cy = (self.roi_min_y + self.roi_max_y) * 0.5
+        center_x = self.roi_offset_x
+        center_y = 0.0
         cz = self.roi_z
+        num_points = 30
+        points = []
 
-        m.pose.position.x = cx
-        m.pose.position.y = cy
-        m.pose.position.z = cz
+        for i in range(num_points + 1):
+            angle = (i / num_points) * math.pi  # 0 .. pi
+            x = center_x + self.roi_radius * math.cos(angle)
+            y = center_y + self.roi_radius * math.sin(angle)
 
-        m.scale.x = (self.roi_max_x - self.roi_min_x)
-        m.scale.y = (self.roi_max_y - self.roi_min_y)
-        m.scale.z = self.roi_thickness
+            ps = PointStamped()
+            ps.point.x = x
+            ps.point.y = y
+            ps.point.z = cz
+            points.append(ps.point)
+
+        m.points = points
+
+        # LINE_STRIP uses scale.x as line width
+        m.scale.x = self.roi_thickness
+        m.scale.y = 0.0
+        m.scale.z = 0.0
 
         r, g, b = self.col_orange if orange else self.col_green
         m.color.r = float(r)
@@ -204,7 +224,7 @@ class FinalPlannerRviz:
         m.color.b = float(b)
         m.color.a = float(self.roi_alpha)
         return m
-
+    
     def _ultrasonic_bar_marker(self, orange: bool) -> Marker:
         m = self._make_marker(self.ultrasonic_frame, "final_planner", 1, Marker.CUBE)
 
@@ -255,6 +275,11 @@ class FinalPlannerRviz:
             f"\nsonic_crash: {bool(s_for_text)}"
             f"{us_raw_str}"
         )
+        if self.yolo_crash_point is not None:
+            px = self.yolo_crash_point.point.x
+            py = self.yolo_crash_point.point.y
+            m.text += f"\nYOLO_pt: {px:.3f}, {py:.3f}"
+
         return m
 
     def _hud_msg(self) -> OverlayText:

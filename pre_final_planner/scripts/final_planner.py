@@ -50,6 +50,9 @@ class FinalPlanner:
         self.sonic_crash_pub = rospy.Publisher("/final_planner/sonic_crash", Bool, queue_size=1)
         self.reason_pub = rospy.Publisher("/final_planner/lane_change_reason", String, queue_size=1)
 
+        self.yolo_crash_point_pub = rospy.Publisher("/final_planner/yolo_crash_point", PointStamped, queue_size=1)
+        self.last_yolo_true_point = None
+
         self.lock = threading.Lock()
         th = threading.Thread(target=self.keyboard_listener, daemon=True)
         th.start()
@@ -151,11 +154,26 @@ class FinalPlanner:
         distance = math.sqrt(x**2 + y**2)
         inside = (x>=0) and (distance <=self.roi_radius)
 
+        if inside:
+            ps = PointStamped()
+            ps.header = msg.header
+            ps.point.x = x
+            ps.point.y = y
+            ps.point.z = msg.point.z
+            self.last_yolo_true_point = ps
+
         self.yolo_queue.append(inside)
 
         if len(self.yolo_queue) == self.yolo_queue.maxlen:
+            prev_yolo_crash = bool(self.yolo_crash)
             count_over = sum(1 for v in self.yolo_queue if v)
             self.yolo_crash = count_over >= self.yolo_count_threshold
+
+            if (not prev_yolo_crash) and self.yolo_crash and (self.last_yolo_true_point is not None):
+                try:
+                    self.yolo_crash_point_pub.publish(self.last_yolo_true_point)
+                except Exception:
+                    pass
 
     def cur_lane_callback(self, msg: Int16):
         self.cur_lane = msg.data
