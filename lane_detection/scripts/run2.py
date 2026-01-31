@@ -20,7 +20,7 @@ from collections import deque
 IMAGE_TOPIC = "/cam1/usb_cam/image_raw" 
 
 # ==========================================
-# 보조 함수 (수정됨)
+# 보조 함수
 # ==========================================
 def calculate_midpoint_score(x1, x2, w):
     hw = w/2
@@ -42,15 +42,14 @@ def calculate_line_score(x1, y1, x2, y2):
 
 def extend_line_to_roi(x1, y1, x2, y2, y_min, y_max):
     """
-    직선을 ROI의 상단(y_min)과 하단(y_max)까지 연장하여
-    새로운 [x_top, y_min, x_bottom, y_max] 좌표를 반환합니다.
-    공식: $ x = (y - y1) / slope + x1 $
+    직선을 ROI의 상단(y_min)과 하단(y_max)까지 연장
+    공식: x = (y - y1) / slope + x1
     """
     if x2 == x1:  # 수직선 예외 처리
         return [x1, y_min, x1, y_max]
     
     slope = (y2 - y1) / (x2 - x1)
-    if slope == 0: # 수평선 예외 처리 (거의 발생 안 함)
+    if slope == 0: 
         return [x1, y_min, x2, y_max]
 
     val_x_top = (y_min - y1) / slope + x1
@@ -59,17 +58,11 @@ def extend_line_to_roi(x1, y1, x2, y2, y_min, y_max):
     return [int(val_x_top), int(y_min), int(val_x_bottom), int(y_max)]
 
 def average_lines_projected(lines):
-    """
-    이미 ROI 상하단으로 투영(Projected)된 라인들의 리스트를 받아
-    단순 X좌표 평균(Midpoint)을 계산합니다.
-    """
     if not lines: return None
     
-    # lines의 각 요소는 이미 [x_top, y_min, x_bottom, y_max] 형태입니다.
     x_tops = [line[0] for line in lines]
     x_bottoms = [line[2] for line in lines]
     
-    # Y좌표는 모든 라인이 동일하므로 첫 번째 라인의 것을 사용
     y_min = lines[0][1]
     y_max = lines[0][3]
 
@@ -79,17 +72,12 @@ def average_lines_projected(lines):
     return [avg_x_top, y_min, avg_x_bottom, y_max]
 
 def filter_innermost_lines(lines, lr):
-    """
-    X축 중점을 기준으로 정렬하여 가장 안쪽 차선 후보들만 남깁니다.
-    입력되는 lines는 이미 ROI 전체로 확장된 라인들입니다.
-    """
     if not lines or len(lines) < 3:
         return lines
 
     lines_with_mid = []
     for line in lines:
         x1, y1, x2, y2 = line
-        # 이미 확장된 라인이므로 mid_x는 ROI 전체에서의 차선 위치를 잘 대변함
         mid_x = (x1 + x2) / 2.0
         lines_with_mid.append((line, mid_x))
 
@@ -104,10 +92,8 @@ def filter_innermost_lines(lines, lr):
     start_idx = int(total_count * 0.0)      
     end_idx = int(total_count * 0.30)
 
-    if end_idx <= start_idx:
-        end_idx = start_idx + 1
-    if end_idx > total_count:
-        end_idx = total_count
+    if end_idx <= start_idx: end_idx = start_idx + 1
+    if end_idx > total_count: end_idx = total_count
 
     filtered_data = lines_with_mid[start_idx:end_idx]
     return [item[0] for item in filtered_data]
@@ -133,6 +119,10 @@ class LaneDetector:
         
         self.cross_threshold = 20000  
         self.cross_queue = deque(maxlen=10) 
+        
+        # [Performance Optimization] 마스크 캐싱용 변수
+        self.roi_mask_cpu = None
+        self.cached_roi_verts = None
 
         # [CUDA Init]
         try:
@@ -173,26 +163,18 @@ class LaneDetector:
                 rospy.logwarn(f"Display Error: {e}")
 
     def filter_by_position(self, lines, side, img_w, img_h):
-        """
-        이미 확장된(projected) 라인에 대해 위치 필터링을 수행합니다.
-        확장된 라인은 y1이 top, y2가 bottom입니다.
-        """
         if not lines: return []
         filtered_lines = []
         threshold_x = img_w // 2 
         
-        # 확장된 라인의 y좌표는 이미 고정(y_min, y_max)이므로 x좌표 위주로 검사
         for line in lines:
             x1, y1, x2, y2 = line
-            # 중간 지점 X 좌표 계산
             mx = (x1 + x2) / 2
             
             is_noise = False
             if side == 'left':
-                # 왼쪽 차선인데 화면 중심보다 너무 오른쪽에 있거나 하는 경우
                 if mx > threshold_x + 50: is_noise = True
             elif side == 'right':
-                # 오른쪽 차선인데 화면 중심보다 너무 왼쪽에 있는 경우
                 if mx < threshold_x - 50: is_noise = True
             
             if not is_noise: filtered_lines.append(line)
@@ -218,28 +200,36 @@ class LaneDetector:
         gpu_edges = cv2.cuda.bitwise_and(gpu_edges, gpu_edges, mask=gpu_mask)
         gpu_edges = self.cuda_dilate.apply(gpu_edges)
 
-        # 2. ROI Logic
+        # 2. ROI Logic [Optimized]
         roi_height = 0.45        
-        y_top = int(h * (1 - roi_height)) # y_min
+        y_top = int(h * (1 - roi_height)) 
         y_mid = int(h * (1 - roi_height / 2))
-        y_bottom = h # y_max
-        
-        roi_verts = np.array([[
-            (cx - int(w * 0.5), h),
-            (cx - int(w * 0.45), y_top),
-            (cx + int(w * 0.45), y_top),
-            (cx + int(w * 0.5), h)
-        ]], dtype=np.int32)
+        y_bottom = h 
 
-        roi_mask_cpu = np.zeros((h, w), dtype=np.uint8)
-        cv2.fillPoly(roi_mask_cpu, roi_verts, 255)
-        hood_h = int(h * 0.1)
-        hood_w_half = int((w * 0.50) / 2)
-        hood_top_left = (cx - hood_w_half, h - hood_h)
-        hood_bottom_right = (cx + hood_w_half, h)
-        cv2.rectangle(roi_mask_cpu, hood_top_left, hood_bottom_right, 0, -1)
-        
-        self.gpu_roi_mask.upload(roi_mask_cpu)
+        # 마스크를 매번 생성하지 않고, 처음이거나 해상도가 바뀔 때만 생성
+        if self.roi_mask_cpu is None or self.roi_mask_cpu.shape != (h, w):
+            roi_verts = np.array([[
+                (cx - int(w * 0.5), h),
+                (cx - int(w * 0.45), y_top),
+                (cx + int(w * 0.45), y_top),
+                (cx + int(w * 0.5), h)
+            ]], dtype=np.int32)
+            
+            self.cached_roi_verts = roi_verts # 시각화를 위해 저장
+            
+            self.roi_mask_cpu = np.zeros((h, w), dtype=np.uint8)
+            cv2.fillPoly(self.roi_mask_cpu, roi_verts, 255)
+            
+            hood_h = int(h * 0.1)
+            hood_w_half = int((w * 0.50) / 2)
+            hood_top_left = (cx - hood_w_half, h - hood_h)
+            hood_bottom_right = (cx + hood_w_half, h)
+            cv2.rectangle(self.roi_mask_cpu, hood_top_left, hood_bottom_right, 0, -1)
+            
+            # GPU로 업로드 (마스크가 바뀔 때만 수행)
+            self.gpu_roi_mask.upload(self.roi_mask_cpu)
+
+        # 이미 업로드된 GPU 마스크 사용하여 AND 연산
         gpu_roi_applied = cv2.cuda.bitwise_and(gpu_edges, self.gpu_roi_mask)
 
         # 3. CPU Logic Requirement (Crosswalk)
@@ -272,12 +262,9 @@ class LaneDetector:
                 slope = dy / dx
                 if abs(slope) <= filtering_slope: continue
 
-                # 점수 계산은 원본 선분으로 수행 (정확도 유지)
                 ls = calculate_line_score(x1, y1, x2, y2)
                 lm = calculate_midpoint_score(x1, y1, w)
                 
-                # [수정됨] 여기서 바로 Projection 수행
-                # 원본 좌표 (x1, y1, x2, y2) -> 확장된 좌표 (x_top, y_top, x_bottom, y_bottom)
                 projected_line = extend_line_to_roi(x1, y1, x2, y2, y_top, y_bottom)
 
                 if ls + lm <= 0: 
@@ -285,23 +272,19 @@ class LaneDetector:
                 else: 
                     right_lines.append(projected_line)
 
-        # Position Filtering (이미 확장된 라인을 대상으로 수행)
         left_lines = self.filter_by_position(left_lines, 'left', w, h)
         right_lines = self.filter_by_position(right_lines, 'right', w, h)
 
-        # Visualization (확장된 라인 그리기)
         if left_lines:
             for lx1, ly1, lx2, ly2 in left_lines:
-                cv2.line(mask_bgr, (lx1, ly1), (lx2, ly2), (0, 0, 100), 1) # 어두운 빨강
+                cv2.line(mask_bgr, (lx1, ly1), (lx2, ly2), (0, 0, 100), 1)
         if right_lines:
             for lx1, ly1, lx2, ly2 in right_lines:
-                cv2.line(mask_bgr, (lx1, ly1), (lx2, ly2), (100, 0, 0), 1) # 어두운 파랑
+                cv2.line(mask_bgr, (lx1, ly1), (lx2, ly2), (100, 0, 0), 1)
         
-        # Innermost Filtering (확장된 라인 대상)
         left_lines = filter_innermost_lines(left_lines, 'left')
         right_lines = filter_innermost_lines(right_lines, 'right')
 
-        # [수정됨] Average Calculation (단순 평균)
         left_result = average_lines_projected(left_lines)
         right_result = average_lines_projected(right_lines)
 
@@ -311,7 +294,6 @@ class LaneDetector:
 
         if left_result:
             lx1, ly1, lx2, ly2 = left_result
-            # 이미 y1, y2가 y_top, h로 고정되어 있으므로 y_mid에서의 x값 계산은 선형 보간
             if (ly2 - ly1) != 0:
                 left_mid_point = int((y_mid - ly1) * (lx2 - lx1) / (ly2 - ly1) + lx1)
             else:
@@ -354,15 +336,35 @@ class LaneDetector:
         target_msg.point.x = filtered_midpoint 
         target_msg.point.y = y_mid
         self.pub_target_px.publish(target_msg)
-
-        cv2.polylines(mask_bgr, roi_verts, isClosed=True, color=(0, 255, 0), thickness=2)
+        
+        # [Visual Update] ROI 마스크 외곽선
+        if self.cached_roi_verts is not None:
+            cv2.polylines(mask_bgr, self.cached_roi_verts, isClosed=True, color=(0, 255, 0), thickness=2)
+            
         cv2.line(mask_bgr, (cx, 0), (cx, h), (255, 255, 255), 1)
+
+        # ========================================================
+        # [NEW] ROI 내 대칭 세로선 그리기 (Guide Lines)
+        # ========================================================
+        guide_offset = 230 # 중심에서 떨어진 거리 (조절 가능)
+        
+        # 왼쪽 세로선: $x = cx - guide\_offset$
+        cv2.line(mask_bgr, (cx - guide_offset, y_top), (cx - guide_offset, h), (0, 255, 255), 2)
+        
+        # 오른쪽 세로선: $x = cx + guide\_offset$
+        cv2.line(mask_bgr, (cx + guide_offset, y_top), (cx + guide_offset, h), (0, 255, 255), 2)
+        # ========================================================
 
         area_text = f"White Area: {white_pixel_area}"
         (text_w, text_h), _ = cv2.getTextSize(area_text, cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2)
         cv2.putText(mask_bgr, area_text, (w - text_w - 20, 40), 
                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
 
+        # Hood Mask는 이제 self.roi_mask_cpu에 통합되어 있지만 시각화를 위해 사각형은 따로 그림
+        hood_h = int(h * 0.1)
+        hood_w_half = int((w * 0.50) / 2)
+        hood_top_left = (cx - hood_w_half, h - hood_h)
+        hood_bottom_right = (cx + hood_w_half, h)
         cv2.rectangle(mask_bgr, hood_top_left, hood_bottom_right, (0, 0, 255), 2)
         cv2.putText(mask_bgr, "Hood Mask", (hood_top_left[0], hood_top_left[1]-5), 
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
