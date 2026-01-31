@@ -6,11 +6,9 @@ import threading
 from std_msgs.msg import Int16, Bool, String
 from geometry_msgs.msg import PointStamped
 from collections import deque
+import math
 
-ROI_MIN_X = 0
-ROI_MAX_X = 0.5
-ROI_MIN_Y = -0.4
-ROI_MAX_Y = 0.4
+ROI_RADIUS = 0.5
 
 SPEED_0    = 0
 SPEED_MID  = 150
@@ -59,11 +57,9 @@ class FinalPlanner:
         self.node_start_time = rospy.Time.now()
 
         # ---- params ----
-        self.roi_min_x = rospy.get_param("planner_common/roi/min_x", ROI_MIN_X)
-        self.roi_max_x = rospy.get_param("planner_common/roi/max_x", ROI_MAX_X)
-        self.roi_min_y = rospy.get_param("planner_common/roi/min_y", ROI_MIN_Y)
-        self.roi_max_y = rospy.get_param("planner_common/roi/max_y", ROI_MAX_Y)
         self.roi_offset_x = rospy.get_param("planner_common/roi/offset_x", 0.74)
+
+        self.roi_radius = rospy.get_param("planner_common/roi/radius", ROI_RADIUS)
 
         self.SPEED_0 = rospy.get_param("~speed_0", SPEED_0)
         self.SPEED_MID = rospy.get_param("~speed_mid", SPEED_MID)
@@ -149,11 +145,11 @@ class FinalPlanner:
         if self._startup_blocked():
             return
 
-        x = msg.point.x
+        x = msg.point.x - self.roi_offset_x
         y = msg.point.y
 
-        inside = ((self.roi_min_x + self.roi_offset_x) <= x <= (self.roi_max_x + self.roi_offset_x)) and \
-                (self.roi_min_y <= y <= self.roi_max_y)
+        distance = math.sqrt(x**2 + y**2)
+        inside = (x>=0) and (distance <=self.roi_radius)
 
         self.yolo_queue.append(inside)
 
