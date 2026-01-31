@@ -33,7 +33,7 @@
     </node>
 	
     <!-- rviz -->
-    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find laser_detection)/rviz/detection.rviz" />
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find parking)/rviz/detection.rviz" />
 
     <!-- rosbag TODO -->
     <!-- <node pkg="rosbag" type="play" name="parking_bag" args="$(find GGDAutonomus2026)/rosbag/parking/parking_done.bag" output="screen" /> -->
