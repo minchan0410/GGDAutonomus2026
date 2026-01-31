@@ -201,7 +201,7 @@ class FinalPlannerRviz:
         points = []
 
         for i in range(num_points + 1):
-            angle = (i / num_points) * math.pi  # 0 .. pi
+            angle = -math.pi/2 + (i / num_points) * math.pi  # -pi/2 .. +pi/2 (front semicircle)
             x = center_x + self.roi_radius * math.cos(angle)
             y = center_y + self.roi_radius * math.sin(angle)
 
@@ -224,7 +224,51 @@ class FinalPlannerRviz:
         m.color.b = float(b)
         m.color.a = float(self.roi_alpha)
         return m
-    
+
+    def _roi_fill_marker(self) -> Marker:
+        # Filled semicircle inside ROI (always green)
+        m = self._make_marker(self.base_frame, "final_planner", 3, Marker.TRIANGLE_LIST)
+
+        center_x = self.roi_offset_x
+        center_y = 0.0
+        cz = self.roi_z
+        num_points = 30
+        points = []
+
+        center = Point()
+        center.x = center_x
+        center.y = center_y
+        center.z = cz
+
+        for i in range(num_points):
+            angle1 = -math.pi/2 + (i / num_points) * math.pi
+            angle2 = -math.pi/2 + ((i + 1) / num_points) * math.pi
+
+            p1 = Point()
+            p1.x = center_x + self.roi_radius * math.cos(angle1)
+            p1.y = center_y + self.roi_radius * math.sin(angle1)
+            p1.z = cz
+
+            p2 = Point()
+            p2.x = center_x + self.roi_radius * math.cos(angle2)
+            p2.y = center_y + self.roi_radius * math.sin(angle2)
+            p2.z = cz
+
+            # triangle: center, p1, p2
+            points.append(center)
+            points.append(p1)
+            points.append(p2)
+
+        m.points = points
+        # scale not used for TRIANGLE_LIST, but set to 1.0
+        m.scale.x = 1.0
+        r, g, b = self.col_green
+        m.color.r = float(r)
+        m.color.g = float(g)
+        m.color.b = float(b)
+        m.color.a = 1.0
+        return m
+
     def _ultrasonic_bar_marker(self, orange: bool) -> Marker:
         m = self._make_marker(self.ultrasonic_frame, "final_planner", 1, Marker.CUBE)
 
@@ -244,6 +288,45 @@ class FinalPlannerRviz:
         m.color.g = float(g)
         m.color.b = float(b)
         m.color.a = float(self.us_alpha)
+        return m
+
+    def _yolo_crash_sphere_marker(self) -> Marker:
+        """Sphere marker at the latest YOLO crash point (id=4)."""
+        if self.yolo_crash_point is None:
+            return None
+        frame = self.yolo_crash_point.header.frame_id if hasattr(self.yolo_crash_point, 'header') and self.yolo_crash_point.header.frame_id else self.base_frame
+        m = self._make_marker(frame, "final_planner", 4, Marker.SPHERE)
+        m.pose.position.x = float(self.yolo_crash_point.point.x)
+        m.pose.position.y = float(self.yolo_crash_point.point.y)
+        # if z is 0 in message, lift it slightly for visibility
+        m.pose.position.z = float(self.yolo_crash_point.point.z) if getattr(self.yolo_crash_point.point, 'z', None) is not None else self.roi_z
+        size = float(rospy.get_param("~crash_point/size", 0.06))
+        m.scale.x = size
+        m.scale.y = size
+        m.scale.z = size
+        m.color.r = 1.0
+        m.color.g = 0.0
+        m.color.b = 0.0
+        m.color.a = 1.0
+        return m
+
+    def _yolo_crash_text_marker(self) -> Marker:
+        """Text marker that shows crash coordinates (id=5)."""
+        if self.yolo_crash_point is None:
+            return None
+        frame = self.yolo_crash_point.header.frame_id if hasattr(self.yolo_crash_point, 'header') and self.yolo_crash_point.header.frame_id else self.base_frame
+        m = self._make_marker(frame, "final_planner", 5, Marker.TEXT_VIEW_FACING)
+        m.pose.position.x = float(self.yolo_crash_point.point.x)
+        m.pose.position.y = float(self.yolo_crash_point.point.y)
+        m.pose.position.z = float(self.yolo_crash_point.point.z) + 0.08 if getattr(self.yolo_crash_point.point, 'z', None) is not None else self.roi_z + 0.08
+        m.scale.z = float(rospy.get_param("~crash_point/text_scale", 0.12))
+        m.color.r = 1.0
+        m.color.g = 1.0
+        m.color.b = 1.0
+        m.color.a = 1.0
+        px = float(self.yolo_crash_point.point.x)
+        py = float(self.yolo_crash_point.point.y)
+        m.text = f"Crash: {px:.3f}, {py:.3f}"
         return m
 
     def _text3d_marker(self) -> Marker:
@@ -278,7 +361,7 @@ class FinalPlannerRviz:
         if self.yolo_crash_point is not None:
             px = self.yolo_crash_point.point.x
             py = self.yolo_crash_point.point.y
-            m.text += f"\nYOLO_pt: {px:.3f}, {py:.3f}"
+            m.text += f"\nCrash_pt: {px:.3f}, {py:.3f}"
 
         return m
 
@@ -325,8 +408,27 @@ class FinalPlannerRviz:
         us_orange = (self.latched_sonic if lane_change else self.sonic_crash)
 
         arr = MarkerArray()
+        # fill first, then outline so outline is visible on top
+        arr.markers.append(self._roi_fill_marker())
         arr.markers.append(self._roi_marker(orange=roi_orange))
         arr.markers.append(self._ultrasonic_bar_marker(orange=us_orange))
+
+        # YOLO crash point visualization: sphere + text, or delete if none
+        if self.yolo_crash_point is not None:
+            sph = self._yolo_crash_sphere_marker()
+            txt = self._yolo_crash_text_marker()
+            if sph is not None:
+                arr.markers.append(sph)
+            if txt is not None:
+                arr.markers.append(txt)
+        else:
+            # remove old markers if any
+            mdel = self._make_marker(self.base_frame, "final_planner", 4, Marker.SPHERE)
+            mdel.action = Marker.DELETE
+            arr.markers.append(mdel)
+            mdel2 = self._make_marker(self.base_frame, "final_planner", 5, Marker.TEXT_VIEW_FACING)
+            mdel2.action = Marker.DELETE
+            arr.markers.append(mdel2)
 
         if self.enable_3d_text:
             arr.markers.append(self._text3d_marker())
