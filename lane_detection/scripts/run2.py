@@ -117,7 +117,7 @@ class LaneDetector:
         self.window_size = 15
         self.steer_history = deque(maxlen=self.window_size)
         
-        self.cross_threshold = 20000  
+        self.cross_threshold = 14000  
         self.cross_queue = deque(maxlen=10) 
         
         # [Performance Optimization] 마스크 캐싱용 변수
@@ -195,7 +195,7 @@ class LaneDetector:
         gpu_gray = cv2.cuda.cvtColor(self.gpu_src, cv2.COLOR_BGR2GRAY)
         gpu_blur = self.cuda_gaussian.apply(gpu_gray)
         gpu_edges = self.cuda_canny.detect(gpu_blur)
-        _, gpu_thresh = cv2.cuda.threshold(gpu_gray, 1, 255, cv2.THRESH_BINARY)
+        _, gpu_thresh = cv2.cuda.threshold(gpu_gray, 20, 255, cv2.THRESH_BINARY)
         gpu_mask = self.cuda_erode.apply(gpu_thresh)
         gpu_edges = cv2.cuda.bitwise_and(gpu_edges, gpu_edges, mask=gpu_mask)
         gpu_edges = self.cuda_dilate.apply(gpu_edges)
@@ -346,13 +346,22 @@ class LaneDetector:
         # ========================================================
         # [NEW] ROI 내 대칭 세로선 그리기 (Guide Lines)
         # ========================================================
-        guide_offset = 230 # 중심에서 떨어진 거리 (조절 가능)
+        guide_offset_top = 150    # 상단 중심 거리 (멀리 있는 도로 폭, 좁게 설정)
+        guide_offset_bottom = 270 # 하단 중심 거리 (가까이 있는 도로 폭, 넓게 설정)
         
-        # 왼쪽 세로선: $x = cx - guide\_offset$
-        cv2.line(mask_bgr, (cx - guide_offset, y_top), (cx - guide_offset, h), (0, 255, 255), 2)
+        # 왼쪽 가이드라인: (Top Left) -> (Bottom Left)
+        # 식: (cx - top_offset, y_top) -> (cx - bottom_offset, h)
+        cv2.line(mask_bgr, 
+                 (cx - guide_offset_top, y_top), 
+                 (cx - guide_offset_bottom, h), 
+                 (0, 255, 255), 3)
         
-        # 오른쪽 세로선: $x = cx + guide\_offset$
-        cv2.line(mask_bgr, (cx + guide_offset, y_top), (cx + guide_offset, h), (0, 255, 255), 2)
+        # 오른쪽 가이드라인: (Top Right) -> (Bottom Right)
+        # 식: (cx + top_offset, y_top) -> (cx + bottom_offset, h)
+        cv2.line(mask_bgr,
+                 (cx + guide_offset_top, y_top), 
+                 (cx + guide_offset_bottom, h), 
+                 (0, 255, 255), 3)
         # ========================================================
 
         area_text = f"White Area: {white_pixel_area}"
