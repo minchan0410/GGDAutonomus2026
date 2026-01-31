@@ -42,10 +42,7 @@ class FinalPlannerRviz:
         self.ultrasonic_frame = rospy.get_param("~ultrasonic_frame", "ultrasonic_1_link")
 
         # ROI params (shared with planner)
-        self.roi_min_x = float(rospy.get_param("planner_common/roi/min_x", 0.0))
-        self.roi_max_x = float(rospy.get_param("planner_common/roi/max_x", 0.5))
-        self.roi_min_y = float(rospy.get_param("planner_common/roi/min_y", -0.4))
-        self.roi_max_y = float(rospy.get_param("planner_common/roi/max_y", 0.4))
+
         self.roi_offset_x = float(rospy.get_param("planner_common/roi/offset_x", 0.74))
         self.roi_radius = float(rospy.get_param("planner_common/roi/radius", 1.0))
         self.roi_z = float(rospy.get_param("~roi/z", 0.05))
@@ -290,36 +287,16 @@ class FinalPlannerRviz:
         m.color.a = float(self.us_alpha)
         return m
 
-    def _yolo_crash_sphere_marker(self) -> Marker:
-        """Sphere marker at the latest YOLO crash point (id=4)."""
-        if self.yolo_crash_point is None:
-            return None
-        frame = self.yolo_crash_point.header.frame_id if hasattr(self.yolo_crash_point, 'header') and self.yolo_crash_point.header.frame_id else self.base_frame
-        m = self._make_marker(frame, "final_planner", 4, Marker.SPHERE)
-        m.pose.position.x = float(self.yolo_crash_point.point.x)
-        m.pose.position.y = float(self.yolo_crash_point.point.y)
-        # if z is 0 in message, lift it slightly for visibility
-        m.pose.position.z = float(self.yolo_crash_point.point.z) if getattr(self.yolo_crash_point.point, 'z', None) is not None else self.roi_z
-        size = float(rospy.get_param("~crash_point/size", 0.06))
-        m.scale.x = size
-        m.scale.y = size
-        m.scale.z = size
-        m.color.r = 1.0
-        m.color.g = 0.0
-        m.color.b = 0.0
-        m.color.a = 1.0
-        return m
-
     def _yolo_crash_text_marker(self) -> Marker:
         """Text marker that shows crash coordinates (id=5)."""
         if self.yolo_crash_point is None:
             return None
         frame = self.yolo_crash_point.header.frame_id if hasattr(self.yolo_crash_point, 'header') and self.yolo_crash_point.header.frame_id else self.base_frame
         m = self._make_marker(frame, "final_planner", 5, Marker.TEXT_VIEW_FACING)
-        m.pose.position.x = float(self.yolo_crash_point.point.x)
-        m.pose.position.y = float(self.yolo_crash_point.point.y)
-        m.pose.position.z = float(self.yolo_crash_point.point.z) + 0.08 if getattr(self.yolo_crash_point.point, 'z', None) is not None else self.roi_z + 0.08
-        m.scale.z = float(rospy.get_param("~crash_point/text_scale", 0.12))
+        m.pose.position.x =  -1.5
+        m.pose.position.y = 0.0
+        m.pose.position.z = 0.0
+        m.scale.z = float(rospy.get_param("~crash_point/text_scale", 0.2))
         m.color.r = 1.0
         m.color.g = 1.0
         m.color.b = 1.0
@@ -415,10 +392,7 @@ class FinalPlannerRviz:
 
         # YOLO crash point visualization: sphere + text, or delete if none
         if self.yolo_crash_point is not None:
-            sph = self._yolo_crash_sphere_marker()
             txt = self._yolo_crash_text_marker()
-            if sph is not None:
-                arr.markers.append(sph)
             if txt is not None:
                 arr.markers.append(txt)
         else:

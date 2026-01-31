@@ -352,16 +352,16 @@ class LaneDetector:
         # 왼쪽 가이드라인: (Top Left) -> (Bottom Left)
         # 식: (cx - top_offset, y_top) -> (cx - bottom_offset, h)
         cv2.line(mask_bgr, 
-                 (cx - guide_offset_top, y_top), 
-                 (cx - guide_offset_bottom, h), 
-                 (0, 255, 255), 3)
+                (cx - guide_offset_top, y_top), 
+                (cx - guide_offset_bottom, h), 
+                (0, 255, 255), 3)
         
         # 오른쪽 가이드라인: (Top Right) -> (Bottom Right)
         # 식: (cx + top_offset, y_top) -> (cx + bottom_offset, h)
         cv2.line(mask_bgr,
-                 (cx + guide_offset_top, y_top), 
-                 (cx + guide_offset_bottom, h), 
-                 (0, 255, 255), 3)
+                (cx + guide_offset_top, y_top), 
+                (cx + guide_offset_bottom, h), 
+                (0, 255, 255), 3)
         # ========================================================
 
         area_text = f"White Area: {white_pixel_area}"
