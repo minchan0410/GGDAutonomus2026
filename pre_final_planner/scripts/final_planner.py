@@ -389,9 +389,9 @@ class FinalPlanner:
                             self.lc_step = 4
                             self.lc_start_time = rospy.Time.now()
 
-                    # STEP 4: 좌꺽
+                    # STEP 4: 우꺽
                     elif self.lc_step == 4:
-                        self.drive(0, self.SPEED_HIGH)
+                        self.drive(-self.LC_STEER, self.SPEED_HIGH)
                         if lc_elapsed >= self.steer_time3:
                             self.lc_step = 5
                             self.lc_start_time = rospy.Time.now()
