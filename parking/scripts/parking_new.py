@@ -46,6 +46,8 @@ class Parking:
         self.finish_streak      = 0
         self.parked_streak      = 0
         self.pulled_streak      = 0
+        self.lost_first_streak  = 0
+        # TODO
         # ========================================
         
         
@@ -451,11 +453,13 @@ class Parking:
                 rospy.loginfo_throttle(0.5,f"first car updated, dist: {min_dist:.2f}")
             return True
         else:
-            rospy.logwarn(f"!!!! first car update false !!! dist: {min_dist:.2f}")
-            self.first_car_detected = False
-            self.lost_first = True
-            return False
- 
+            self.lost_first_streak += 1
+            if self.lost_first_streak >= 3:
+                rospy.logwarn(f"!!!! first car update false !!! dist: {min_dist:.2f}")
+                self.first_car_detected = False
+                self.lost_first = True
+                return False
+    
     def track_second_car(self, point):
         """
         point: np.ndarray (N, 2) - 현재 프레임의 후보 점들
