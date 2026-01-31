@@ -85,6 +85,8 @@ class FinalPlanner:
         self.traffic_green_timeout = rospy.get_param("~traffic_green_timeout", 20.0)
         # startup guard: block state changes for a few seconds
         self.state_change_delay_sec = rospy.get_param("~state_change_delay_sec", 0.0)
+        # start state ramp duration (sec)
+        self.start_ramp_sec = rospy.get_param("~start_ramp_sec", 3.0)
         # serial readiness gate
         self.serial_timeout_sec = rospy.get_param("~serial_timeout_sec", 0.5)
 
@@ -98,8 +100,10 @@ class FinalPlanner:
         self.last_lane_steer = 0
         self.lane_steer_received = False
 
-        self.state = "lane_driving"
+        self.state = "start"
         self.last_state = None
+        self.start_time = None
+        self.start_done = False
 
         # lane-change reason latch (for viz)
         # "none" | "yolo" | "sonic" | "both"
@@ -321,6 +325,23 @@ class FinalPlanner:
                 self.drive(0, self.default_motor)
 
             elif mode == "FINAL":
+                # start state: ramp 0 -> 255 once, then go to lane_driving
+                if self.state == "start":
+                    if self.start_done:
+                        self.state = "lane_driving"
+                    else:
+                        if self.start_time is None:
+                            self.start_time = rospy.Time.now()
+                        ramp_sec = max(0.001, float(self.start_ramp_sec))
+                        elapsed = (rospy.Time.now() - self.start_time).to_sec()
+                        ratio = max(0.0, min(1.0, elapsed / ramp_sec))
+                        speed_cmd = int(round(255 * ratio))
+                        self.drive(lane_steer, speed_cmd)
+                        if ratio >= 1.0:
+                            self.start_done = True
+                            self.state = "lane_driving"
+                            self.start_time = None
+
                 # lane driving
                 if self.state == "lane_driving":
                     self.lane_change_reason = "none"
