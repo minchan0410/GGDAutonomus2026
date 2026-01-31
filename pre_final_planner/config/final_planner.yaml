@@ -23,6 +23,8 @@ final_planner:
   default_motor: 0
   # 시작 후 일정 시간 동안 상태 변경(차선 변경 트리거) 무시
   state_change_delay_sec: 6.0
+  # start state: 0 -> 255 램프 가속 시간(초)
+  start_ramp_sec: 1.0
   # 시리얼 OK 신호가 이 시간 안에 들어와야 준비 상태로 인정 (초)
   serial_timeout_sec: 0.5
   speed_0: 0
