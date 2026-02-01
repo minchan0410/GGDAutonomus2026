@@ -31,24 +31,25 @@
 struct Box {
     double center_x;
     double center_y;
-    double width;
-    double length;
-    double heading; // radian
+    double width;  // Diameter
+    double length; // Diameter
+    double heading; // Circle은 0.0
     double z_min;
     double z_max;
 };
 
-// [추가] 트래킹 되는 객체 정보를 담는 구조체
+// [수정] 속도와 시간 정보를 포함한 트래킹 객체
 struct TrackedObject {
     int id;
     Box box;
-    pcl::PointCloud<pcl::PointXYZ> points; // 시각화를 위해 포인트 저장
-    
-    // 고유 색상
+    pcl::PointCloud<pcl::PointXYZ> points;
     uint8_t r, g, b;
-
-    // 사라짐 감지용 (몇 프레임 동안 놓쳤는지)
     int no_detection_count; 
+    
+    // [추가] 등속 운동 예측을 위한 변수
+    double vx; // x축 속도 (m/s)
+    double vy; // y축 속도 (m/s)
+    ros::Time last_update_time; // 마지막으로 위치가 갱신된 시간
 };
 
 class LaserClusterNode {
@@ -83,11 +84,11 @@ private:
     int accumulate_frames_;
     std::deque<pcl::PointCloud<pcl::PointXYZ>::Ptr> cloud_queue_;
 
-    // [추가] Tracking Variables
-    std::vector<TrackedObject> tracks_; // 현재 추적 중인 객체 리스트
-    int next_id_;                       // 다음 부여할 ID
-    double tracking_distance_th_;       // 같은 물체로 판단할 거리 기준 (m)
-    int max_disappeared_frames_;        // 몇 프레임 안 보이면 삭제할지
+    // Tracking Variables
+    std::vector<TrackedObject> tracks_; 
+    int next_id_;                       
+    double tracking_distance_th_;       
+    int max_disappeared_frames_;        
 
 public:
     LaserClusterNode() : private_nh_("~"), next_id_(0) { 
@@ -104,7 +105,7 @@ public:
         // 3. Fixed Box Params
         private_nh_.param("use_fixed_size", use_fixed_size_, true);
         private_nh_.param("fixed_width", fixed_width_, 0.9);
-        private_nh_.param("fixed_length", fixed_length_, 0.45);
+        private_nh_.param("fixed_length", fixed_length_, 0.9);
 
         // 4. ROI Params
         private_nh_.param("roi_min_range", roi_min_range_, 0.3);
@@ -113,13 +114,14 @@ public:
         // 5. Accumulation Params
         private_nh_.param("accumulate_frames", accumulate_frames_, 3); 
 
-        // 6. [추가] Tracking Params
-        private_nh_.param("tracking_distance_th", tracking_distance_th_, 1.0); // 1m 이내면 같은 물체로 간주
-        private_nh_.param("max_disappeared_frames", max_disappeared_frames_, 5); // 5프레임 놓치면 삭제
+        // 6. Tracking Params
+        private_nh_.param("tracking_distance_th", tracking_distance_th_, 1.0); 
+        private_nh_.param("max_disappeared_frames", max_disappeared_frames_, 5); 
 
         ROS_INFO("--------------------------------");
+        ROS_INFO("Mode: CIRCULAR FITTING + CV PREDICTION");
         ROS_INFO("Cluster Params: Tol=%.2f, Min=%d, Max=%d", cluster_tolerance_, min_cluster_size_, max_cluster_size_);
-        ROS_INFO("Tracking Params: DistTh=%.2f, MaxLost=%d", tracking_distance_th_, max_disappeared_frames_);
+        ROS_INFO("Circle Params: Fixed=%s, Diameter=%.2f", use_fixed_size_ ? "True" : "False", fixed_width_);
         ROS_INFO("--------------------------------");
 
         scan_sub_ = nh_.subscribe("/scan", 1, &LaserClusterNode::scanCallback, this);
@@ -131,27 +133,28 @@ public:
         ROS_INFO("Laser Cluster Node Started.");
     }
 
-    // [추가] 유클리드 거리 계산
     double getDistance(const Box& b1, const Box& b2) {
         return std::sqrt(std::pow(b1.center_x - b2.center_x, 2) + std::pow(b1.center_y - b2.center_y, 2));
     }
 
-    // [추가] 트래킹 로직 업데이트 함수
-    void updateTracking(const std::vector<Box>& new_boxes, const std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr>& new_cluster_points) {
+    // [수정] 현재 시간(scan_time)을 인자로 받음
+    void updateTracking(const std::vector<Box>& new_boxes, const std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr>& new_cluster_points, ros::Time current_time) {
         
         std::vector<bool> matched_new_box(new_boxes.size(), false);
         
-        // 1. 기존 트랙들과 새로운 박스 매칭 (Greedy Nearest Neighbor)
+        // 1. 기존 트랙 매칭
         for (auto& track : tracks_) {
+            
+            // 예측(Prediction) 위치를 기준으로 매칭을 시도하는 것이 더 정확함
+            // 여기서는 간단히 기존 위치 기준으로 매칭하되, 뒤에서 Update함.
+
             double min_dist = std::numeric_limits<double>::max();
             int best_match_idx = -1;
 
             for (size_t i = 0; i < new_boxes.size(); ++i) {
-                if (matched_new_box[i]) continue; // 이미 매칭된 박스는 패스
+                if (matched_new_box[i]) continue; 
 
-                double dist = std::abs(track.box.center_x - new_boxes[i].center_x) + std::abs(track.box.center_y - new_boxes[i].center_y);
-                // 유클리드 거리 대신 맨해튼 거리로 1차 필터링 후 정밀계산 해도 됨 (여기선 간단히)
-                dist = getDistance(track.box, new_boxes[i]);
+                double dist = getDistance(track.box, new_boxes[i]);
 
                 if (dist < min_dist) {
                     min_dist = dist;
@@ -159,19 +162,47 @@ public:
                 }
             }
 
+            // 시간 차이 계산 (dt)
+            double dt = (current_time - track.last_update_time).toSec();
+            if (dt <= 0.0) dt = 0.1; // 0으로 나누기 방지용 안전장치
+
             if (best_match_idx != -1 && min_dist < tracking_distance_th_) {
-                // 매칭 성공: 정보 업데이트
+                // --- 매칭 성공 (Observation Update) ---
+                
+                // 1. 속도 업데이트 (Low Pass Filter 적용하여 노이즈 감소)
+                double alpha = 0.6; // 1.0이면 현재 속도 100% 반영, 낮을수록 부드럽게 변함
+                double current_vx = (new_boxes[best_match_idx].center_x - track.box.center_x) / dt;
+                double current_vy = (new_boxes[best_match_idx].center_y - track.box.center_y) / dt;
+                
+                // 튀는 값 방지 (ex: 매칭 오류로 인해 순간이동 하는 경우)
+                if (std::abs(current_vx) < 10.0 && std::abs(current_vy) < 10.0) {
+                    track.vx = (1.0 - alpha) * track.vx + alpha * current_vx;
+                    track.vy = (1.0 - alpha) * track.vy + alpha * current_vy;
+                }
+
+                // 2. 위치 및 정보 업데이트
                 track.box = new_boxes[best_match_idx];
                 track.points = *new_cluster_points[best_match_idx];
-                track.no_detection_count = 0; // 카운트 초기화
+                track.no_detection_count = 0; 
+                track.last_update_time = current_time;
+                
                 matched_new_box[best_match_idx] = true;
+
             } else {
-                // 매칭 실패: 사라짐 카운트 증가
+                // --- 매칭 실패 (Prediction Step only) ---
                 track.no_detection_count++;
+                
+                // [핵심] 등속 운동 모델 적용 (위치 예측)
+                // 사라진 동안에도 기존 속도(vx, vy)만큼 이동시킴
+                track.box.center_x += track.vx * dt;
+                track.box.center_y += track.vy * dt;
+                
+                // 시간도 갱신해줘야 다음 루프에서 dt가 올바르게 계산됨
+                track.last_update_time = current_time;
             }
         }
 
-        // 2. 매칭되지 않은 새로운 박스는 신규 트랙 생성
+        // 2. 신규 트랙 생성
         for (size_t i = 0; i < new_boxes.size(); ++i) {
             if (!matched_new_box[i]) {
                 TrackedObject new_track;
@@ -179,14 +210,16 @@ public:
                 new_track.box = new_boxes[i];
                 new_track.points = *new_cluster_points[i];
                 new_track.no_detection_count = 0;
+                
+                // 초기 속도 0, 초기 시간 설정
+                new_track.vx = 0.0;
+                new_track.vy = 0.0;
+                new_track.last_update_time = current_time;
 
-                // ID 기반 고유 색상 생성 (랜덤하지만 ID에 고정됨)
-                // HSV to RGB 변환 흉내 혹은 단순 해싱
                 new_track.r = (new_track.id * 50 + 20) % 255;
                 new_track.g = (new_track.id * 100 + 50) % 255;
                 new_track.b = (new_track.id * 150 + 100) % 255;
                 
-                // 너무 어두우면 밝게 보정
                 if(new_track.r < 80 && new_track.g < 80 && new_track.b < 80) {
                     new_track.r += 100;
                 }
@@ -195,103 +228,69 @@ public:
             }
         }
 
-        // 3. 오래동안 감지 안된 트랙 삭제
-        // remove_if를 사용하여 no_detection_count가 임계치를 넘으면 삭제
+        // 3. 삭제
         tracks_.erase(std::remove_if(tracks_.begin(), tracks_.end(),
             [this](const TrackedObject& t) {
                 return t.no_detection_count > max_disappeared_frames_;
             }), tracks_.end());
     }
 
-    Box fittingLShape(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cluster) {
-        Box best_box;
-        double min_score = std::numeric_limits<double>::max(); 
+    Box fittingCircle(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cluster) {
+        Box circle_box;
 
         pcl::PointXYZ min_pt, max_pt;
         pcl::getMinMax3D(*cluster, min_pt, max_pt);
-        best_box.z_min = min_pt.z;
-        best_box.z_max = max_pt.z;
 
-        double step = 2.0; 
-        
-        double box_long_side = std::max(fixed_width_, fixed_length_);
-        double box_short_side = std::min(fixed_width_, fixed_length_);
+        double box_cx = (min_pt.x + max_pt.x) / 2.0;
+        double box_cy = (min_pt.y + max_pt.y) / 2.0;
 
-        for (double theta = 0.0; theta < 90.0; theta += step) {
-            double rad = theta * M_PI / 180.0;
-            double cos_t = std::cos(rad);
-            double sin_t = std::sin(rad);
+        circle_box.z_min = min_pt.z;
+        circle_box.z_max = max_pt.z;
+        circle_box.heading = 0.0;
 
-            double min_x = std::numeric_limits<double>::max();
-            double max_x = -std::numeric_limits<double>::max();
-            double min_y = std::numeric_limits<double>::max();
-            double max_y = -std::numeric_limits<double>::max();
+        double radius = 0.0;
 
-            std::vector<std::pair<double, double>> rotated_points;
-            rotated_points.reserve(cluster->size());
+        if (use_fixed_size_) {
+            radius = fixed_width_ / 2.0;
+            double obs_diam_x = max_pt.x - min_pt.x;
+            double obs_diam_y = max_pt.y - min_pt.y;
+            double obs_diameter = std::max(obs_diam_x, obs_diam_y); 
 
-            for (const auto& p : cluster->points) {
-                double x_prime = p.x * cos_t + p.y * sin_t;
-                double y_prime = -p.x * sin_t + p.y * cos_t;
-                rotated_points.push_back({x_prime, y_prime});
-
-                if (x_prime < min_x) min_x = x_prime;
-                if (x_prime > max_x) max_x = x_prime;
-                if (y_prime < min_y) min_y = y_prime;
-                if (y_prime > max_y) max_y = y_prime;
-            }
-
-            double current_score = (max_x - min_x) * (max_y - min_y); // Area
-
-            if (current_score < min_score) {
-                min_score = current_score;
-                best_box.heading = rad;
-
-                double obs_len_x = max_x - min_x;
-                double obs_len_y = max_y - min_y;
-                double applied_w, applied_l;
-
-                if (use_fixed_size_) {
-                    if (obs_len_x > obs_len_y) {
-                        applied_w = box_long_side; applied_l = box_short_side;
-                    } else {
-                        applied_w = box_short_side; applied_l = box_long_side;
-                    }
+            double diff = (fixed_width_ - obs_diameter) / 2.0;
+            
+            if (diff > 0) {
+                double dist_to_sensor = std::sqrt(box_cx * box_cx + box_cy * box_cy);
+                if (dist_to_sensor > 0.001) {
+                    double ux = box_cx / dist_to_sensor;
+                    double uy = box_cy / dist_to_sensor;
+                    circle_box.center_x = box_cx + ux * diff;
+                    circle_box.center_y = box_cy + uy * diff;
                 } else {
-                    applied_w = obs_len_x; applied_l = obs_len_y;
+                    circle_box.center_x = box_cx;
+                    circle_box.center_y = box_cy;
                 }
-                
-                best_box.width = applied_w;
-                best_box.length = applied_l;
-
-                double cx_1 = min_x + applied_w / 2.0; double cy_1 = min_y + applied_l / 2.0;
-                double cx_2 = min_x + applied_w / 2.0; double cy_2 = max_y - applied_l / 2.0;
-                double cx_3 = max_x - applied_w / 2.0; double cy_3 = min_y + applied_l / 2.0;
-                double cx_4 = max_x - applied_w / 2.0; double cy_4 = max_y - applied_l / 2.0;
-
-                double d1 = cx_1*cx_1 + cy_1*cy_1;
-                double d2 = cx_2*cx_2 + cy_2*cy_2;
-                double d3 = cx_3*cx_3 + cy_3*cy_3;
-                double d4 = cx_4*cx_4 + cy_4*cy_4;
-
-                double best_cx_prime, best_cy_prime;
-                double min_d = std::numeric_limits<double>::max();
-
-                if(d1 < min_d) { min_d = d1; best_cx_prime = cx_1; best_cy_prime = cy_1; }
-                if(d2 < min_d) { min_d = d2; best_cx_prime = cx_2; best_cy_prime = cy_2; }
-                if(d3 < min_d) { min_d = d3; best_cx_prime = cx_3; best_cy_prime = cy_3; }
-                if(d4 < min_d) { min_d = d4; best_cx_prime = cx_4; best_cy_prime = cy_4; }
-
-                best_box.center_x = best_cx_prime * cos_t - best_cy_prime * sin_t;
-                best_box.center_y = best_cx_prime * sin_t + best_cy_prime * cos_t;
-
-                if (best_box.width < best_box.length) {
-                    best_box.heading += M_PI_2; 
-                    std::swap(best_box.width, best_box.length); 
-                }
+            } else {
+                circle_box.center_x = box_cx;
+                circle_box.center_y = box_cy;
             }
+
+        } else {
+            circle_box.center_x = box_cx;
+            circle_box.center_y = box_cy;
+            double max_dist_sq = 0.0;
+            for (const auto& p : cluster->points) {
+                double dx = p.x - circle_box.center_x;
+                double dy = p.y - circle_box.center_y;
+                double dist_sq = dx*dx + dy*dy;
+                if (dist_sq > max_dist_sq) max_dist_sq = dist_sq;
+            }
+            radius = std::sqrt(max_dist_sq);
         }
-        return best_box;
+
+        circle_box.width = radius * 2.0; 
+        circle_box.length = radius * 2.0; 
+
+        return circle_box;
     }
 
     void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_in) {
@@ -379,16 +378,16 @@ public:
                 continue; 
             }
             
-            // Fitting
-            Box box = fittingLShape(current_cluster);
+            Box box = fittingCircle(current_cluster);
             current_boxes.push_back(box);
             current_cluster_points.push_back(current_cluster);
         }
 
-        // --- UPDATE TRACKING ---
-        updateTracking(current_boxes, current_cluster_points);
+        // --- UPDATE TRACKING (Pass Current Time) ---
+        // scan_in->header.stamp를 사용하여 정확한 측정 시간을 전달합니다.
+        updateTracking(current_boxes, current_cluster_points, scan_in->header.stamp);
 
-        // --- VISUALIZATION (Based on Tracks) ---
+        // --- VISUALIZATION ---
         visualization_msgs::MarkerArray marker_array;
         visualization_msgs::Marker delete_marker;
         delete_marker.action = visualization_msgs::Marker::DELETEALL;
@@ -397,64 +396,53 @@ public:
         geometry_msgs::PoseArray pose_array_msg;
         pose_array_msg.header = scan_in->header; 
 
-        // [수정] Coloring Cloud를 위한 준비
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_colored(new pcl::PointCloud<pcl::PointXYZRGB>);
 
         for (size_t i = 0; i < tracks_.size(); ++i) {
             
             const TrackedObject& track = tracks_[i];
-            
-            // [수정] 놓친 물체(Ghost)인지 확인
             bool is_missing = (track.no_detection_count > 0);
             
-            // 놓쳤다면 투명도를 0.3(흐릿함), 잡혔다면 1.0(선명함)
-            float alpha_val = is_missing ? 0.3 : 1.0; 
+            // 놓친 물체는 투명도 0.4로 흐릿하게, 잡힌 건 1.0
+            float alpha_val = is_missing ? 0.4 : 1.0; 
 
-            // 1. Pose (놓쳤어도 마지막 위치 발행)
+            // 1. Pose (예측된 위치가 반영됨)
             geometry_msgs::Pose pose;
             pose.position.x = track.box.center_x;
             pose.position.y = track.box.center_y;
             pose.position.z = (track.box.z_min + track.box.z_max) / 2.0;
-            pose.orientation.w = cos(track.box.heading * 0.5);
-            pose.orientation.z = sin(track.box.heading * 0.5);
+            pose.orientation.w = 1.0; 
             pose_array_msg.poses.push_back(pose);
 
-            // 2. Marker - Box
-            visualization_msgs::Marker box_marker;
-            box_marker.header = scan_in->header;
-            box_marker.ns = "boxes";
-            box_marker.id = track.id;
-            box_marker.type = visualization_msgs::Marker::LINE_STRIP;
-            box_marker.action = visualization_msgs::Marker::ADD;
-            box_marker.scale.x = 0.05; 
+            // 2. Marker - Circle
+            visualization_msgs::Marker circle_marker;
+            circle_marker.header = scan_in->header;
+            circle_marker.ns = "circles";
+            circle_marker.id = track.id;
+            circle_marker.type = visualization_msgs::Marker::LINE_STRIP;
+            circle_marker.action = visualization_msgs::Marker::ADD;
+            circle_marker.scale.x = 0.05; 
             
-            box_marker.color.r = track.r / 255.0; 
-            box_marker.color.g = track.g / 255.0; 
-            box_marker.color.b = track.b / 255.0; 
-            box_marker.color.a = alpha_val; // [수정] 투명도 적용
-            box_marker.lifetime = ros::Duration(0.1);
+            circle_marker.color.r = track.r / 255.0; 
+            circle_marker.color.g = track.g / 255.0; 
+            circle_marker.color.b = track.b / 255.0; 
+            circle_marker.color.a = alpha_val;
+            circle_marker.lifetime = ros::Duration(0.1);
             
-            // ... (박스 좌표 계산 로직 동일) ...
-            // (위 코드 복사해서 cx, cy 계산 부분 그대로 사용)
-            double cos_t = std::cos(track.box.heading);
-            double sin_t = std::sin(track.box.heading);
-            double hw = track.box.width / 2.0;
-            double hl = track.box.length / 2.0;
-            double cx[5] = {hw, -hw, -hw, hw, hw};
-            double cy[5] = {hl, hl, -hl, -hl, hl};
-
-            for(int k=0; k<5; ++k) {
+            const int circle_points = 36; 
+            double radius = track.box.width / 2.0;
+            
+            for(int k=0; k <= circle_points; ++k) {
+                double angle = k * (2.0 * M_PI / circle_points);
                 geometry_msgs::Point p;
-                p.x = track.box.center_x + (cx[k] * cos_t - cy[k] * sin_t);
-                p.y = track.box.center_y + (cx[k] * sin_t + cy[k] * cos_t);
+                p.x = track.box.center_x + radius * std::cos(angle);
+                p.y = track.box.center_y + radius * std::sin(angle);
                 p.z = track.box.z_min;
-                box_marker.points.push_back(p);
+                circle_marker.points.push_back(p);
             }
-            marker_array.markers.push_back(box_marker);
+            marker_array.markers.push_back(circle_marker);
 
             // 3. Text Marker (ID)
-            // ... (기존 코드 동일, alpha만 적용해주면 좋음) ...
-            // 3. Marker - Text (ID 표시)
             visualization_msgs::Marker text_marker;
             text_marker.header = scan_in->header;
             text_marker.ns = "ids";
@@ -463,20 +451,19 @@ public:
             text_marker.action = visualization_msgs::Marker::ADD;
             
             std::string id_str = "ID: " + std::to_string(track.id);
+            // 사라진 상태면 (Pred) 라고 표시해줌
+            if(is_missing) id_str += " (Pred)";
+            
             text_marker.text = id_str;
-            text_marker.pose.position.x = track.box.center_x;
+            text_marker.pose.position.x = track.box.center_x - 0.3;
             text_marker.pose.position.y = track.box.center_y;
             text_marker.pose.position.z = track.box.z_max + 0.5; 
             text_marker.scale.z = 0.3; 
-            text_marker.color.r = 1.0; text_marker.color.g = 1.0; text_marker.color.b = 1.0; text_marker.color.a = 1.0;
+            text_marker.color.r = 1.0; text_marker.color.g = 1.0; text_marker.color.b = 1.0; text_marker.color.a = alpha_val;
             text_marker.lifetime = ros::Duration(0.1);
             marker_array.markers.push_back(text_marker);
 
-            // 4. PointCloud Coloring
-            // [중요] 놓친 물체는 현재 포인트 클라우드가 없으므로(과거 데이터임),
-            // 포인트를 그리지 않거나, 과거 포인트라도 그리고 싶다면 아래 로직 유지.
-            // 보통 놓친 물체의 '과거 포인트'를 현재 씬에 그리면 
-            // 실제로는 없는 자리에 점이 찍혀 헷갈리므로 PointCloud는 안 그리는 게 좋습니다.
+            // 4. PointCloud Coloring (놓치지 않았을 때만 그림)
             if (!is_missing) {
                 for (const auto& pt : track.points.points) {
                     pcl::PointXYZRGB pt_rgb;
@@ -502,7 +489,7 @@ public:
 };
 
 int main(int argc, char** argv) {
-    ros::init(argc, argv, "laser_cluster_tracking_node");
+    ros::init(argc, argv, "laser_cluster_circle_node");
     LaserClusterNode node;
     ros::spin();
     return 0;
