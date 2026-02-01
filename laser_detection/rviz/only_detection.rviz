@@ -95,7 +95,7 @@ Visualization Manager:
       Marker Topic: /detection_markers
       Name: MarkerArray
       Namespaces:
-        boxes: true
+        circles: true
         ids: true
       Queue Size: 100
       Value: true
@@ -156,11 +156,11 @@ Visualization Manager:
       Use rainbow: true
       Value: true
     - Alpha: 1
-      Arrow Length: 1
+      Arrow Length: 0.30000001192092896
       Axes Length: 0.20000000298023224
       Axes Radius: 0.10000000149011612
       Class: rviz/PoseArray
-      Color: 255; 255; 255
+      Color: 255; 25; 0
       Enabled: true
       Head Length: 0.07000000029802322
       Head Radius: 0.029999999329447746
@@ -169,7 +169,7 @@ Visualization Manager:
       Shaft Length: 0.23000000417232513
       Shaft Radius: 0.009999999776482582
       Shape: Axes
-      Topic: /detection_poses
+      Topic: /detection_poses_viz
       Unreliable: false
       Value: true
   Enabled: true
@@ -216,9 +216,9 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.5697963237762451
+      Pitch: 1.3147963285446167
       Target Frame: <Fixed Frame>
-      Yaw: 3.1353912353515625
+      Yaw: 3.0103914737701416
     Saved: ~
 Window Geometry:
   Displays:
