@@ -4,6 +4,6 @@
     <node name="detection" pkg="laser_detection" type="detection" output="screen">
         <rosparam command="load" file="$(find laser_detection)/config/params.yaml" />
     </node>
-    <node name="occ_grid" pkg="laser_detection" type="occ_grid" output="screen" />
-    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find laser_detection)/rviz/detection.rviz" />
+    <!-- <node name="occ_grid" pkg="laser_detection" type="occ_grid" output="screen" /> -->
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find laser_detection)/rviz/only_detection.rviz" />
 </launch>

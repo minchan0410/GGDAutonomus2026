@@ -1,13 +1,21 @@
 # 1. Euclidean Clustering Parameters
-cluster_tolerance: 0.3     # 점 사이의 최대 거리 (미터). 이보다 가까우면 같은 그룹으로 인식
-min_cluster_size: 10        # 클러스터를 구성하는 최소 점의 개수
-max_cluster_size: 500       # 클러스터를 구성하는 최대 점의 개수
+cluster_tolerance: 0.4     # 점 사이의 최대 거리 (미터). 이보다 가까우면 같은 그룹으로 인식
+min_cluster_size: 30        # 클러스터를 구성하는 최소 점의 개수
+max_cluster_size: 1000       # 클러스터를 구성하는 최대 점의 개수
 
 # 2. Size Filtering Parameters (Brute-force Distance Check)
-max_cluster_extent: 1.2     # 클러스터 내 두 점 사이의 최대 거리 허용치 (미터)
+max_cluster_extent: 1.7     # 클러스터 내 두 점 사이의 최대 거리 허용치 (미터)
 min_cluster_extent: 0.2     # 클러스터 내 두 점 사이의 최소 거리 허용치 (미터)
 
 # 3. Fixed Box Parameters (L-Shape Fitting)
 use_fixed_size: true        # true: 고정된 크기 사용, false: 관측된 크기 사용
 fixed_width: 0.6            # 고정 박스의 폭 (미터)
 fixed_length: 0.5          # 고정 박스의 길이 (미터)
+
+roi_min_range: 0.25
+roi_max_range: 7.0
+
+accumulate_frames: 2
+
+tracking_distance_th: 1.0
+max_disappeared_frames: 7
