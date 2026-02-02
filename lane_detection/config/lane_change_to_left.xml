@@ -194,8 +194,8 @@
                                     <field>data</field>
                                     <field_type>0</field_type>
                                     <scale>
-                                        <absolute_maximum>200000</absolute_maximum>
-                                        <absolute_minimum>-200000</absolute_minimum>
+                                        <absolute_maximum>150000</absolute_maximum>
+                                        <absolute_minimum>-150000</absolute_minimum>
                                         <relative_maximum>0</relative_maximum>
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>1</type>
