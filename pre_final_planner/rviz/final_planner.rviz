@@ -6,6 +6,7 @@ Panels:
       Expanded:
         - /Global Options1
         - /Status1
+        - /TF1
         - /TF1/Frames1
         - /lane_driving/target_point1/Namespaces1
       Splitter Ratio: 0.7382352948188782
@@ -27,7 +28,7 @@ Panels:
   - Class: rviz/Time
     Name: Time
     SyncMode: 0
-    SyncSource: yolo_overlay
+    SyncSource: ""
 Preferences:
   PromptSaveOnExit: true
 Toolbars:
@@ -72,6 +73,26 @@ Visualization Manager:
           Alpha: 1
           Show Axes: false
           Show Trail: false
+        ultrasonic_0_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        ultrasonic_1_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        ultrasonic_2_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        ultrasonic_3_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        ultrasonic_4_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
       Name: RobotModel
       Robot Description: robot_description
       TF Prefix: ""
@@ -89,6 +110,16 @@ Visualization Manager:
           Value: true
         camera_link:
           Value: true
+        ultrasonic_0_link:
+          Value: false
+        ultrasonic_1_link:
+          Value: false
+        ultrasonic_2_link:
+          Value: false
+        ultrasonic_3_link:
+          Value: false
+        ultrasonic_4_link:
+          Value: false
       Marker Alpha: 1
       Marker Scale: 1
       Name: TF
@@ -98,6 +129,16 @@ Visualization Manager:
       Tree:
         base_link:
           camera_link:
+            {}
+          ultrasonic_0_link:
+            {}
+          ultrasonic_1_link:
+            {}
+          ultrasonic_2_link:
+            {}
+          ultrasonic_3_link:
+            {}
+          ultrasonic_4_link:
             {}
       Update Interval: 0
       Value: true
@@ -169,7 +210,7 @@ Visualization Manager:
       Marker Topic: /car_projected_markers
       Name: car_projected
       Namespaces:
-        car_projected: true
+        {}
       Queue Size: 100
       Value: true
     - Class: rviz/MarkerArray

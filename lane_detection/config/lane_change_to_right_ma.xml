@@ -35,7 +35,7 @@
                                         <relative_minimum>-20</relative_minimum>
                                         <type>2</type>
                                     </scale>
-                                    <topic>/lane_change/left/x</topic>
+                                    <topic>/lane_change/right/x</topic>
                                     <type>std_msgs/Float32</type>
                                 </x_axis>
                                 <y_axis>
@@ -48,7 +48,7 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>1</type>
                                     </scale>
-                                    <topic>/lane_change/left/x</topic>
+                                    <topic>/lane_change/right/x</topic>
                                     <type>std_msgs/Float32</type>
                                 </y_axis>
                             </axes>
@@ -72,7 +72,7 @@
                                 <type>0</type>
                             </style>
                             <subscriber_queue_size>100</subscriber_queue_size>
-                            <title>/lane_change/left/x</title>
+                            <title>/lane_change/right/x</title>
                         </curve_0>
                         <curve_1>
                             <axes>
@@ -86,7 +86,7 @@
                                         <relative_minimum>-20</relative_minimum>
                                         <type>2</type>
                                     </scale>
-                                    <topic>/lane_change/left/ema</topic>
+                                    <topic>/lane_change/right/ema</topic>
                                     <type>std_msgs/Float32</type>
                                 </x_axis>
                                 <y_axis>
@@ -99,7 +99,7 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>1</type>
                                     </scale>
-                                    <topic>/lane_change/left/ema</topic>
+                                    <topic>/lane_change/right/ema</topic>
                                     <type>std_msgs/Float32</type>
                                 </y_axis>
                             </axes>
@@ -123,14 +123,14 @@
                                 <type>0</type>
                             </style>
                             <subscriber_queue_size>100</subscriber_queue_size>
-                            <title>/lane_change/left/ema</title>
+                            <title>/lane_change/right/ema</title>
                         </curve_1>
                     </curves>
                     <legend>
                         <visible>true</visible>
                     </legend>
                     <plot_rate>30</plot_rate>
-                    <title>left x, left ema_x 비교 </title>
+                    <title>right x / right ema 비교 </title>
                 </column_0>
                 <column_1>
                     <axes>
@@ -160,7 +160,7 @@
                                         <relative_minimum>-20</relative_minimum>
                                         <type>2</type>
                                     </scale>
-                                    <topic>/lane_change/left/ema_dx</topic>
+                                    <topic>/lane_change/right/ema_dx</topic>
                                     <type>std_msgs/Float32</type>
                                 </x_axis>
                                 <y_axis>
@@ -173,7 +173,7 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>1</type>
                                     </scale>
-                                    <topic>/lane_change/left/ema_dx</topic>
+                                    <topic>/lane_change/right/ema_dx</topic>
                                     <type>std_msgs/Float32</type>
                                 </y_axis>
                             </axes>
@@ -197,7 +197,7 @@
                                 <type>0</type>
                             </style>
                             <subscriber_queue_size>100</subscriber_queue_size>
-                            <title>/lane_change/left/ema_dx</title>
+                            <title>/lane_change/right/ema_dx</title>
                         </curve_0>
                     </curves>
                     <legend>
@@ -236,7 +236,7 @@
                                         <relative_minimum>-20</relative_minimum>
                                         <type>2</type>
                                     </scale>
-                                    <topic>/lane_change/left/ema_ddx</topic>
+                                    <topic>/lane_change/right/ema_ddx</topic>
                                     <type>std_msgs/Float32</type>
                                 </x_axis>
                                 <y_axis>
@@ -249,7 +249,7 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>1</type>
                                     </scale>
-                                    <topic>/lane_change/left/ema_ddx</topic>
+                                    <topic>/lane_change/right/ema_ddx</topic>
                                     <type>std_msgs/Float32</type>
                                 </y_axis>
                             </axes>
@@ -273,14 +273,14 @@
                                 <type>0</type>
                             </style>
                             <subscriber_queue_size>100</subscriber_queue_size>
-                            <title>/lane_change/left/ema_ddx</title>
+                            <title>/lane_change/right/ema_ddx</title>
                         </curve_0>
                     </curves>
                     <legend>
                         <visible>true</visible>
                     </legend>
                     <plot_rate>30</plot_rate>
-                    <title>/lane_change/left/ema_ddx</title>
+                    <title>/lane_change/right/ema_ddx</title>
                 </column_0>
                 <column_1>
                     <axes>
@@ -310,7 +310,7 @@
                                         <relative_minimum>-20</relative_minimum>
                                         <type>2</type>
                                     </scale>
-                                    <topic>/lane_change/left/flag</topic>
+                                    <topic>/lane_change/right/flag</topic>
                                     <type>std_msgs/Int16</type>
                                 </x_axis>
                                 <y_axis>
@@ -347,14 +347,14 @@
                                 <type>0</type>
                             </style>
                             <subscriber_queue_size>100</subscriber_queue_size>
-                            <title>/lane_change/left/flag</title>
+                            <title>/lane_change/right/flag</title>
                         </curve_0>
                     </curves>
                     <legend>
                         <visible>true</visible>
                     </legend>
                     <plot_rate>30</plot_rate>
-                    <title>/lane_change/left/flag</title>
+                    <title>/lane_change/right/flag</title>
                 </column_1>
             </row_1>
         </plots>
