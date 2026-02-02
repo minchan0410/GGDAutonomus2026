@@ -205,7 +205,7 @@ Visualization Manager:
         lane_bev_rviz: true
       Queue Size: 100
       Value: true
-    - Class: rviz/Marker
+    - Class: rviz/MarkerArray
       Enabled: true
       Marker Topic: /car_projected_markers
       Name: car_projected

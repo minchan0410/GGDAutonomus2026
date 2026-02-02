@@ -46,17 +46,16 @@ scripts/
 ---
 
 #### 2) `object_projection.py`
-검출된 차량을 지면 좌표계로 투영하여 가장 가까운 차량을 퍼블리시.
+검출된 차량을 지면 좌표계로 투영하여 모든 차량을 퍼블리시.
 
 **Topics**
 - Sub: `/car_detection` (`vision_msgs/Detection2DArray`)
-- Pub: `/car_projected` (`geometry_msgs/PointStamped`)
-- Pub: `/car_projected_markers` (`visualization_msgs/Marker`, optional)
+- Pub: `/car_projected` (`geometry_msgs/PoseArray`)
+- Pub: `/car_projected_markers` (`visualization_msgs/MarkerArray`, optional)
 
 **Params**
 - `sub_car_topic`, `pub_car_projected_topic`, `pub_markers_topic`
 - `frame_id` : 기준 프레임 (예: `base_link`)
-- `select_nearest` : 가장 가까운 차량만 선택
 - `camera/*` : 카메라 파라미터 (fx, fy, cx, cy, height, pitch_deg)
 - `marker/*` : RViz 마커 설정
 

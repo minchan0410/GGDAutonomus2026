@@ -48,7 +48,7 @@ pre_final_planner/
 - 입력
   - `/lane_steer` (std_msgs/Int16)
   - `/cur_lane` (std_msgs/Int16)
-  - `/car_projected` (geometry_msgs/PointStamped)
+  - `/car_projected` (geometry_msgs/PoseArray)
   - `/traffic` (std_msgs/Int16)
   - `/crossline` (std_msgs/Int16)
 - 출력
