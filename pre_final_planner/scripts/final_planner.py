@@ -117,7 +117,12 @@ class FinalPlanner:
         # ---- params ----
         self.roi_offset_x = rospy.get_param("planner_common/roi/offset_x", 0.74)
 
+        # ROI radius (meters)
         self.roi_radius = rospy.get_param("planner_common/roi/radius", ROI_RADIUS)
+        # ROI sector parameters (degrees): min and max angle (inclusive), 0 = forward.
+        # Defaults: -90..+90 (front 180°)
+        self.roi_angle_min_deg = rospy.get_param("planner_common/roi/angle_min_deg", -90.0)
+        self.roi_angle_max_deg = rospy.get_param("planner_common/roi/angle_max_deg", 90.0)
 
         self.SPEED_0 = rospy.get_param("~speed_0", SPEED_0)
         self.SPEED_MID = rospy.get_param("~speed_mid", SPEED_MID)
@@ -225,7 +230,23 @@ class FinalPlanner:
         y = msg.point.y
 
         distance = math.sqrt(x**2 + y**2)
-        inside = (x>=0) and (distance <=self.roi_radius)
+
+        # sector ROI: inside if within radius AND within angular sector [roi_angle_min_deg, roi_angle_max_deg] (deg)
+        if distance <= self.roi_radius:
+            angle_deg = math.degrees(math.atan2(y, x))
+            # normalize angles to [-180, 180)
+            def _norm(a):
+                return ((a + 180.0) % 360.0) - 180.0
+            a = _norm(angle_deg)
+            amin = _norm(self.roi_angle_min_deg)
+            amax = _norm(self.roi_angle_max_deg)
+            if amin <= amax:
+                inside = (a >= amin) and (a <= amax)
+            else:
+                # wrap-around interval (e.g., amin=150, amax=-150)
+                inside = (a >= amin) or (a <= amax)
+        else:
+            inside = False
 
         if inside:
             ps = PointStamped()

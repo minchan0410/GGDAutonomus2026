@@ -42,6 +42,9 @@ class FinalPlannerRviz:
 
         self.roi_offset_x = float(rospy.get_param("planner_common/roi/offset_x", 0.74))
         self.roi_radius = float(rospy.get_param("planner_common/roi/radius", 1.0))
+        # ROI angular bounds (degrees, vehicle frame): left=-90, right=+90 by default
+        self.roi_angle_min_deg = float(rospy.get_param("planner_common/roi/angle_min_deg", -90.0))
+        self.roi_angle_max_deg = float(rospy.get_param("planner_common/roi/angle_max_deg", 90.0))
         self.roi_z = float(rospy.get_param("~roi/z", 0.05))
         self.roi_thickness = float(rospy.get_param("~roi/thickness", 0.02))
         self.roi_alpha = float(rospy.get_param("~roi/alpha", 0.25))
@@ -160,25 +163,46 @@ class FinalPlannerRviz:
         return m
 
     def _roi_marker(self, orange: bool) -> Marker:
-        # LINE_STRIP으로 반원 ROI 표시
+        # LINE_STRIP으로 부채꼴 ROI outline 표시 (center->arc->center to show sector boundaries)
         m = self._make_marker(self.base_frame, "final_planner", 0, Marker.LINE_STRIP)
 
         center_x = self.roi_offset_x
         center_y = 0.0
         cz = self.roi_z
-        num_points = 30
+        num_points = 60
         points = []
 
+        # compute start angle and sweep (in radians), handling wrap-around
+        amin = math.radians(self.roi_angle_min_deg)
+        amax = math.radians(self.roi_angle_max_deg)
+        sweep = amax - amin
+        # normalize sweep to [0, 2*pi)
+        sweep = (sweep + 2.0 * math.pi) % (2.0 * math.pi)
+        if sweep == 0.0:
+            # degenerate: empty sector -> nothing to draw
+            m.points = []
+            return m
+
+        # start with center to draw radial line
+        center = Point()
+        center.x = center_x
+        center.y = center_y
+        center.z = cz
+        points.append(center)
+
         for i in range(num_points + 1):
-            angle = -math.pi/2 + (i / num_points) * math.pi  # -pi/2 .. +pi/2 (front semicircle)
+            angle = amin + (float(i) / num_points) * sweep
             x = center_x + self.roi_radius * math.cos(angle)
             y = center_y + self.roi_radius * math.sin(angle)
 
-            ps = PointStamped()
-            ps.point.x = x
-            ps.point.y = y
-            ps.point.z = cz
-            points.append(ps.point)
+            p = Point()
+            p.x = x
+            p.y = y
+            p.z = cz
+            points.append(p)
+
+        # close back to center to draw second radial line
+        points.append(center)
 
         m.points = points
 
@@ -195,13 +219,13 @@ class FinalPlannerRviz:
         return m
 
     def _roi_fill_marker(self) -> Marker:
-        # Filled semicircle inside ROI (always green)
+        # Filled sector inside ROI (always green)
         m = self._make_marker(self.base_frame, "final_planner", 3, Marker.TRIANGLE_LIST)
 
         center_x = self.roi_offset_x
         center_y = 0.0
         cz = self.roi_z
-        num_points = 30
+        num_points = 60
         points = []
 
         center = Point()
@@ -209,9 +233,17 @@ class FinalPlannerRviz:
         center.y = center_y
         center.z = cz
 
+        amin = math.radians(self.roi_angle_min_deg)
+        amax = math.radians(self.roi_angle_max_deg)
+        sweep = amax - amin
+        sweep = (sweep + 2.0 * math.pi) % (2.0 * math.pi)
+        if sweep == 0.0:
+            m.points = []
+            return m
+
         for i in range(num_points):
-            angle1 = -math.pi/2 + (i / num_points) * math.pi
-            angle2 = -math.pi/2 + ((i + 1) / num_points) * math.pi
+            angle1 = amin + (float(i) / num_points) * sweep
+            angle2 = amin + (float(i + 1) / num_points) * sweep
 
             p1 = Point()
             p1.x = center_x + self.roi_radius * math.cos(angle1)
@@ -235,6 +267,7 @@ class FinalPlannerRviz:
         m.color.r = float(r)
         m.color.g = float(g)
         m.color.b = float(b)
+        # filled should be fully opaque for visibility
         m.color.a = 1.0
         return m
 
