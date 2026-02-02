@@ -15,6 +15,10 @@ DEFAULT_Y_MID = 240
 DEFAULT_MA_WINDOW = 10
 DEFAULT_EMA_WINDOW = 20
 DEFAULT_INVALID_VALUE = float('nan')
+DEFAULT_IMAGE_WIDTH = 640
+DEFAULT_IMAGE_HEIGHT = 480
+DEFAULT_ROI_HEIGHT = 0.45
+DEFAULT_CLAMP_TO_ROI = True
 
 # Thresholds (<=0 disables each check)
 DEFAULT_LEFT_X_THRESH = -0.1
@@ -118,10 +122,19 @@ class LaneChangeChecker:
 
         self.lane_lines_topic = _get_param(ns, 'lane_lines_topic', DEFAULT_LANE_LINES_TOPIC)
         self.rate_hz = float(_get_param(ns, 'rate_hz', DEFAULT_RATE_HZ))
-        self.y_mid = int(_get_param(ns, 'y_mid', DEFAULT_Y_MID))
         self.ma_window = int(_get_param(ns, 'ma_window', DEFAULT_MA_WINDOW))
         self.ema_window = int(_get_param(ns, 'ema_window', DEFAULT_EMA_WINDOW))
         self.invalid_value = float(_get_param(ns, 'invalid_value', DEFAULT_INVALID_VALUE))
+        self.image_width = int(_get_param(ns, 'image_width', DEFAULT_IMAGE_WIDTH))
+        self.image_height = int(_get_param(ns, 'image_height', DEFAULT_IMAGE_HEIGHT))
+        self.roi_height = float(_get_param(ns, 'roi_height', DEFAULT_ROI_HEIGHT))
+        self.clamp_to_roi = bool(_get_param(ns, 'clamp_to_roi', DEFAULT_CLAMP_TO_ROI))
+
+        # Match run2.py ROI geometry and y_mid definition
+        self.y_top = int(self.image_height * (1.0 - self.roi_height))
+        self.y_mid = int(self.image_height * (1.0 - self.roi_height / 2.0))
+        self.y_bottom = self.image_height
+        self.roi_left_x_mid, self.roi_right_x_mid = self._roi_x_bounds_at_y(self.y_mid)
 
         # Thresholds (<=0 disables check)
         self.left_thresh = {
@@ -198,6 +211,21 @@ class LaneChangeChecker:
     def _line_valid(line):
         return line and len(line) == 4 and all(v != -1 for v in line)
 
+    def _roi_x_bounds_at_y(self, y):
+        cx = self.image_width // 2
+        x_left_bottom = cx - int(self.image_width * 0.5)
+        x_left_top = cx - int(self.image_width * 0.45)
+        x_right_top = cx + int(self.image_width * 0.45)
+        x_right_bottom = cx + int(self.image_width * 0.5)
+
+        if self.y_bottom == self.y_top:
+            return float(x_left_top), float(x_right_top)
+
+        t = (float(y) - self.y_top) / float(self.y_bottom - self.y_top)
+        x_left = x_left_top + t * (x_left_bottom - x_left_top)
+        x_right = x_right_top + t * (x_right_bottom - x_right_top)
+        return float(x_left), float(x_right)
+
     @staticmethod
     def _interp_x_at_y(line, y):
         x1, y1, x2, y2 = line
@@ -254,6 +282,12 @@ class LaneChangeChecker:
             left_x = self._interp_x_at_y(left_line, self.y_mid)
         if self._line_valid(right_line):
             right_x = self._interp_x_at_y(right_line, self.y_mid)
+
+        if self.clamp_to_roi:
+            if not _finite(left_x):
+                left_x = self.roi_left_x_mid
+            if not _finite(right_x):
+                right_x = self.roi_right_x_mid
 
         left_metrics = self.left_state.update(left_x, dt) if _finite(left_x) else None
         right_metrics = self.right_state.update(right_x, dt) if _finite(right_x) else None
