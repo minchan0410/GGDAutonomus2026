@@ -4,7 +4,7 @@
 import rospy
 import threading
 from std_msgs.msg import Int16, Bool, String, Int32MultiArray, Float32
-from geometry_msgs.msg import PointStamped
+from geometry_msgs.msg import PointStamped, PoseArray
 from collections import deque
 import math
 
@@ -83,7 +83,7 @@ class FinalPlanner:
         # ---- subs ----
         rospy.Subscriber("/lane_steer", Int16, self.lane_steer_callback, queue_size=1)
         rospy.Subscriber("/cur_lane", Int16, self.cur_lane_callback, queue_size=1)
-        rospy.Subscriber("/car_projected", PointStamped, self.car_projected_callback, queue_size=1)
+        rospy.Subscriber("/car_projected", PoseArray, self.car_projected_callback, queue_size=1)
         rospy.Subscriber("/traffic", Int16, self.traffic_callback, queue_size=1)
         rospy.Subscriber("/crossline", Int16, self.crossline_callback, queue_size=1)
         rospy.Subscriber("/rosserial_check", Int16, self.serial_check_callback, queue_size=1)
@@ -219,15 +219,16 @@ class FinalPlanner:
         self.run()
 
     # ---------------- callbacks ----------------
-    def car_projected_callback(self, msg: PointStamped):
+    def car_projected_callback(self, msg: PoseArray):
         # ✅ FIX: init 중 콜백이 먼저 들어오면 yolo_queue가 아직 없을 수 있음
         if not hasattr(self, "yolo_queue"):
             return
         if self._startup_blocked():
             return
 
-        x = msg.point.x - self.roi_offset_x
-        y = msg.point.y
+        nearest_point = None
+        nearest_dist = None
+        inside_any = False
 
         distance = math.sqrt(x**2 + y**2)
 
@@ -248,15 +249,15 @@ class FinalPlanner:
         else:
             inside = False
 
-        if inside:
+        if inside_any and nearest_point is not None:
             ps = PointStamped()
             ps.header = msg.header
-            ps.point.x = x
-            ps.point.y = y
-            ps.point.z = msg.point.z
+            ps.point.x = nearest_point[0]
+            ps.point.y = nearest_point[1]
+            ps.point.z = 0.0
             self.last_yolo_true_point = ps
 
-        self.yolo_queue.append(inside)
+        self.yolo_queue.append(inside_any)
 
         if len(self.yolo_queue) == self.yolo_queue.maxlen:
             prev_yolo_crash = bool(self.yolo_crash)

@@ -7,10 +7,6 @@ planner_common:
     offset_x: 0.7
     # ROI 반경(미터)
     radius: 1.2
-    # ROI 각도 범위(도, 차량 기준): 기본값은 왼쪽 -90도, 오른쪽 +90도 (전방 180도)
-    # angle_min_deg: 왼쪽 경계 각도(도), angle_max_deg: 오른쪽 경계 각도(도)
-    angle_min_deg: -90.0
-    angle_max_deg: 90.0
 
 final_planner:
   # 루프 주기(Hz)
@@ -29,7 +25,7 @@ final_planner:
   serial_timeout_sec: 0.5
 
   # 첫 번째 차선 주행 지속 시간(초)
-  lane_driving1_timeout_sec: 10.0
+  lane_driving1_timeout_sec: 9.0
 
   # 좌 차선 변경 완료 후 지연 시간(초)
   left_lc_complete_delay_sec: 0.0
@@ -73,6 +69,6 @@ final_planner:
   # 우측 EMA 윈도우 크기
   right_ema_window: 20
   # 좌측 EMA_DDX 임계값
-  left_ema_ddx_thresh: 7500.0
+  left_ema_ddx_thresh: 10000.0
   # 우측 EMA_DDX 임계값
-  right_ema_ddx_thresh: 7500.0
+  right_ema_ddx_thresh: 10000.0
