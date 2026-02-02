@@ -6,10 +6,10 @@ planner_common:
     # 전방 ROI 중심 보정값(미터)
     offset_x: 0.7
     # ROI 반경(미터)
-    radius: 1.2
+    radius: 2.3
     # ROI 섹터 각도 범위(도): 최소/최대 각도(포함), 0 = 전방
-    angle_min_deg: -90.0
-    angle_max_deg: 90.0
+    angle_min_deg: -15.0
+    angle_max_deg: 15.0
 
 final_planner:
   # 루프 주기(Hz)

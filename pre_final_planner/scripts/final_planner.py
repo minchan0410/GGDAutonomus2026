@@ -230,24 +230,36 @@ class FinalPlanner:
         nearest_dist = None
         inside_any = False
 
-        distance = math.sqrt(x**2 + y**2)
+        # Process each detected point in the PoseArray
+        for pose in msg.poses:
+            x = pose.position.x
+            y = pose.position.y
 
-        # sector ROI: inside if within radius AND within angular sector [roi_angle_min_deg, roi_angle_max_deg] (deg)
-        if distance <= self.roi_radius:
-            angle_deg = math.degrees(math.atan2(y, x))
-            # normalize angles to [-180, 180)
-            def _norm(a):
-                return ((a + 180.0) % 360.0) - 180.0
-            a = _norm(angle_deg)
-            amin = _norm(self.roi_angle_min_deg)
-            amax = _norm(self.roi_angle_max_deg)
-            if amin <= amax:
-                inside = (a >= amin) and (a <= amax)
+            distance = math.sqrt(x**2 + y**2)
+
+            # sector ROI: inside if within radius AND within angular sector [roi_angle_min_deg, roi_angle_max_deg] (deg)
+            if distance <= self.roi_radius:
+                angle_deg = math.degrees(math.atan2(y, x))
+                # normalize angles to [-180, 180)
+                def _norm(a):
+                    return ((a + 180.0) % 360.0) - 180.0
+                a = _norm(angle_deg)
+                amin = _norm(self.roi_angle_min_deg)
+                amax = _norm(self.roi_angle_max_deg)
+                if amin <= amax:
+                    inside = (a >= amin) and (a <= amax)
+                else:
+                    # wrap-around interval (e.g., amin=150, amax=-150)
+                    inside = (a >= amin) or (a <= amax)
             else:
-                # wrap-around interval (e.g., amin=150, amax=-150)
-                inside = (a >= amin) or (a <= amax)
-        else:
-            inside = False
+                inside = False
+
+            if inside:
+                inside_any = True
+                # Keep track of nearest point
+                if nearest_dist is None or distance < nearest_dist:
+                    nearest_dist = distance
+                    nearest_point = (x, y)
 
         if inside_any and nearest_point is not None:
             ps = PointStamped()

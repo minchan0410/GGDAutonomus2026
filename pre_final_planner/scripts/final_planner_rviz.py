@@ -176,8 +176,9 @@ class FinalPlannerRviz:
         amin = math.radians(self.roi_angle_min_deg)
         amax = math.radians(self.roi_angle_max_deg)
         sweep = amax - amin
-        # normalize sweep to [0, 2*pi)
-        sweep = (sweep + 2.0 * math.pi) % (2.0 * math.pi)
+        # ensure sweep is positive (if amax < amin, add 2*pi for wrap-around)
+        if sweep < 0:
+            sweep += 2.0 * math.pi
         if sweep == 0.0:
             # degenerate: empty sector -> nothing to draw
             m.points = []
@@ -236,7 +237,9 @@ class FinalPlannerRviz:
         amin = math.radians(self.roi_angle_min_deg)
         amax = math.radians(self.roi_angle_max_deg)
         sweep = amax - amin
-        sweep = (sweep + 2.0 * math.pi) % (2.0 * math.pi)
+        # ensure sweep is positive (if amax < amin, add 2*pi for wrap-around)
+        if sweep < 0:
+            sweep += 2.0 * math.pi
         if sweep == 0.0:
             m.points = []
             return m
@@ -263,12 +266,14 @@ class FinalPlannerRviz:
         m.points = points
         # scale not used for TRIANGLE_LIST, but set to 1.0
         m.scale.x = 1.0
+        m.scale.y = 1.0
+        m.scale.z = 1.0
         r, g, b = self.col_green
         m.color.r = float(r)
         m.color.g = float(g)
         m.color.b = float(b)
-        # filled should be fully opaque for visibility
-        m.color.a = 1.0
+        # filled should be semi-transparent for visibility
+        m.color.a = 0.3
         return m
 
     def _yolo_crash_text_marker(self) -> Marker:
