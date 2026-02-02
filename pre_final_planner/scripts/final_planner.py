@@ -32,7 +32,6 @@ class FinalPlanner:
 
         # ---- subs ----
         rospy.Subscriber("/lane_steer", Int16, self.lane_steer_callback, queue_size=1)
-        rospy.Subscriber("/ultrasonic", Int16, self.ultrasonic1_callback, queue_size=1)
         rospy.Subscriber("/cur_lane", Int16, self.cur_lane_callback, queue_size=1)
         rospy.Subscriber("/car_projected", PointStamped, self.car_projected_callback, queue_size=1)
         rospy.Subscriber("/traffic", Int16, self.traffic_callback, queue_size=1)
@@ -47,7 +46,6 @@ class FinalPlanner:
         # 매 루프 publish (20Hz)로 사용
         self.state_pub = rospy.Publisher("/final_planner/state", String, queue_size=1)
         self.yolo_crash_pub = rospy.Publisher("/final_planner/yolo_crash", Bool, queue_size=1)
-        self.sonic_crash_pub = rospy.Publisher("/final_planner/sonic_crash", Bool, queue_size=1)
         self.reason_pub = rospy.Publisher("/final_planner/lane_change_reason", String, queue_size=1)
 
         self.yolo_crash_point_pub = rospy.Publisher("/final_planner/yolo_crash_point", PointStamped, queue_size=1)
@@ -76,10 +74,8 @@ class FinalPlanner:
         self.straight_time1 = rospy.get_param("~straight_time1", STRAIGHT_TIME1)
         self.straight_time2 = rospy.get_param("~straight_time2", STRAIGHT_TIME2)
 
-        self.ultrasonic_threshold = rospy.get_param("planner_common/ultrasonic/threshold", 300)
         self.queues_maxlen = rospy.get_param("~queues_maxlen", 10)
         self.yolo_count_threshold = rospy.get_param("~yolo_count_threshold", 7)
-        self.ultrasonic_count_threshold = rospy.get_param("~ultrasonic_count_threshold", 7)
 
         self.traffic_green_threshold = rospy.get_param("~traffic_green_threshold", 5)
         self.traffic_green_timeout = rospy.get_param("~traffic_green_timeout", 20.0)
@@ -94,6 +90,7 @@ class FinalPlanner:
         self.freeze_on_serial_loss = rospy.get_param("~freeze_on_serial_loss", True)
         self.frozen = False
         self.frozen_since = None
+        self.last_serial_ready = None
 
         # ---- state ----
         self.mode = "DEFAULT"
@@ -106,13 +103,10 @@ class FinalPlanner:
         self.start_done = False
 
         # lane-change reason latch (for viz)
-        # "none" | "yolo" | "sonic" | "both"
+        # "none" | "yolo"
         self.lane_change_reason = "none"
 
         # ---- queues ----
-        self.ultrasonic_queue = deque(maxlen=self.queues_maxlen)
-        self.ultrasonic_crash = False
-
         self.yolo_queue = deque(maxlen=self.queues_maxlen)
         self.yolo_crash = False
 
@@ -133,18 +127,6 @@ class FinalPlanner:
         self.run()
 
     # ---------------- callbacks ----------------
-    def ultrasonic1_callback(self, msg: Int16):
-        if self._startup_blocked():
-            return
-        if msg.data == -1:
-            self.ultrasonic_queue.append(float('inf'))
-        else:
-            self.ultrasonic_queue.append(msg.data)
-
-            if len(self.ultrasonic_queue) == self.ultrasonic_queue.maxlen:
-                count_over = sum(1 for v in self.ultrasonic_queue if v <= self.ultrasonic_threshold)
-                self.ultrasonic_crash = count_over >= self.ultrasonic_count_threshold
-
     def car_projected_callback(self, msg: PointStamped):
         # ✅ FIX: init 중 콜백이 먼저 들어오면 yolo_queue가 아직 없을 수 있음
         if not hasattr(self, "yolo_queue"):
@@ -210,14 +192,14 @@ class FinalPlanner:
             self.serial_last_time = rospy.Time.now()
 
     # ---------------- keyboard ----------------
-    def _log(self, error=False, throttle=0.5):
+    def _log(self, error=False):
         serial_txt = "SERIAL OK" if self._serial_ready() else "SERIAL ERROR"
         state_txt = "default" if self.mode == "DEFAULT" else self.state.lower()
         line = f"[FINAL_PLANNER] | {serial_txt} | State = {state_txt}"
         if error:
-            rospy.logwarn_throttle(throttle, line)
+            rospy.logwarn(line)
         else:
-            rospy.loginfo_throttle(throttle, line)
+            rospy.loginfo(line)
 
     def keyboard_listener(self):
         while not rospy.is_shutdown():
@@ -238,13 +220,8 @@ class FinalPlanner:
     # ---------------- helper: reason latch ----------------
     def _compute_reason(self) -> str:
         y = bool(self.yolo_crash)
-        s = bool(self.ultrasonic_crash)
-        if y and s:
-            return "both"
         if y:
             return "yolo"
-        if s:
-            return "sonic"
         return "none"
 
     def _enter_lane_change(self, target_state: str):
@@ -280,6 +257,11 @@ class FinalPlanner:
                 state_local = self.state
                 reason_local = self.lane_change_reason
 
+            serial_ready = self._serial_ready()
+            if self.last_serial_ready is None or serial_ready != self.last_serial_ready:
+                self._log(error=not serial_ready)
+                self.last_serial_ready = serial_ready
+
             # log state transitions
             if state_local != self.last_state:
                 if state_local == "lane_driving":
@@ -296,24 +278,23 @@ class FinalPlanner:
                 self.last_state = state_local
 
             # ---- FREEZE behavior (FINAL + serial lost) ----
-            if mode == "FINAL" and self.freeze_on_serial_loss and (not self._serial_ready()):
+            if mode == "FINAL" and self.freeze_on_serial_loss and (not serial_ready):
                 with self.lock:
                     if not self.frozen:
                         self.frozen = True
                         self.frozen_since = rospy.Time.now()
-                rospy.logwarn_throttle(0.5, "[FINAL_PLANNER] SERIAL LOST -> FREEZE (keep state, stop commands)")
+                        rospy.logwarn("[FINAL_PLANNER] SERIAL LOST -> FREEZE (keep state, stop commands)")
 
                 # ---- publish status for viz (EVERY LOOP) ----
                 self.state_pub.publish(String(self.state))
                 self.yolo_crash_pub.publish(Bool(bool(self.yolo_crash)))
-                self.sonic_crash_pub.publish(Bool(bool(self.ultrasonic_crash)))
                 self.reason_pub.publish(String(str(self.lane_change_reason)))
 
                 self.rate.sleep()
                 continue
 
             # serial recovered -> unfreeze
-            if self.frozen and self._serial_ready():
+            if self.frozen and serial_ready:
                 with self.lock:
                     self.frozen = False
                     self.frozen_since = None
@@ -321,7 +302,6 @@ class FinalPlanner:
 
             # ---- planner logic ----
             if mode == "DEFAULT":
-                self._log(error=not self._serial_ready())
                 self.drive(0, self.default_motor)
 
             elif mode == "FINAL":
@@ -336,7 +316,7 @@ class FinalPlanner:
                         elapsed = (rospy.Time.now() - self.start_time).to_sec()
                         ratio = max(0.0, min(1.0, elapsed / ramp_sec))
                         speed_cmd = int(round(255 * ratio))
-                        self.drive(lane_steer,  speed_cmd)
+                        self.drive(lane_steer, speed_cmd)
                         if ratio >= 1.0:
                             self.start_done = True
                             self.state = "lane_driving"
@@ -349,7 +329,7 @@ class FinalPlanner:
                     self.drive(lane_steer, self.SPEED_HIGH)
 
                     # crash triggers -> lane change
-                    if (self.ultrasonic_crash or self.yolo_crash) and (not self._startup_blocked()):
+                    if self.yolo_crash and (not self._startup_blocked()):
                         with self.lock:
                             self._enter_lane_change("lane_change")
 
@@ -389,9 +369,9 @@ class FinalPlanner:
                             self.lc_step = 4
                             self.lc_start_time = rospy.Time.now()
 
-                    # STEP 4: 좌꺽
+                    # STEP 4: 우꺽
                     elif self.lc_step == 4:
-                        self.drive(0, self.SPEED_HIGH)
+                        self.drive(-self.LC_STEER, self.SPEED_HIGH)
                         if lc_elapsed >= self.steer_time3:
                             self.lc_step = 5
                             self.lc_start_time = rospy.Time.now()
@@ -429,7 +409,6 @@ class FinalPlanner:
             # lane-change 동안 주황 유지가 필요하면 viz 노드에서 state 기반 latch하면 됨.
             self.state_pub.publish(String(self.state))
             self.yolo_crash_pub.publish(Bool(bool(self.yolo_crash)))
-            self.sonic_crash_pub.publish(Bool(bool(self.ultrasonic_crash)))
             self.reason_pub.publish(String(str(self.lane_change_reason)))
 
             self.rate.sleep()
