@@ -54,6 +54,8 @@ class SideState:
         self.ema = None
         self.last_x = None
         self.last_dx = None
+        self.last_ema = None
+        self.last_ema_dx = None
         self.last_valid = False
 
     def reset(self):
@@ -61,10 +63,12 @@ class SideState:
         self.ema = None
         self.last_x = None
         self.last_dx = None
+        self.last_ema = None
+        self.last_ema_dx = None
         self.last_valid = False
 
     def update(self, x, dt):
-        # Returns x, dx, ddx, ma, ema
+        # Returns x, dx, ddx, ma, ema, ema_dx, ema_ddx
         if not _finite(x) or dt <= 0.0:
             self.reset()
             return None
@@ -88,8 +92,17 @@ class SideState:
         else:
             self.ema = (alpha * x) + (1.0 - alpha) * self.ema
 
+        ema_dx = None
+        ema_ddx = None
+        if self.last_ema is not None:
+            ema_dx = (self.ema - self.last_ema) / dt
+            if self.last_ema_dx is not None:
+                ema_ddx = (ema_dx - self.last_ema_dx) / dt
+        self.last_ema = self.ema
+        self.last_ema_dx = ema_dx
+
         self.last_valid = True
-        return x, dx, ddx, ma, self.ema
+        return x, dx, ddx, ma, self.ema, ema_dx, ema_ddx
 
 
 class LaneChangeChecker:
@@ -140,6 +153,8 @@ class LaneChangeChecker:
         self.pub_left_ddx = rospy.Publisher('lane_change/left/ddx', Float32, queue_size=10)
         self.pub_left_ma = rospy.Publisher('lane_change/left/ma', Float32, queue_size=10)
         self.pub_left_ema = rospy.Publisher('lane_change/left/ema', Float32, queue_size=10)
+        self.pub_left_ema_dx = rospy.Publisher('lane_change/left/ema_dx', Float32, queue_size=10)
+        self.pub_left_ema_ddx = rospy.Publisher('lane_change/left/ema_ddx', Float32, queue_size=10)
         self.pub_left_flag = rospy.Publisher('lane_change/left/flag', Int16, queue_size=10)
 
         # Publishers for right
@@ -148,6 +163,8 @@ class LaneChangeChecker:
         self.pub_right_ddx = rospy.Publisher('lane_change/right/ddx', Float32, queue_size=10)
         self.pub_right_ma = rospy.Publisher('lane_change/right/ma', Float32, queue_size=10)
         self.pub_right_ema = rospy.Publisher('lane_change/right/ema', Float32, queue_size=10)
+        self.pub_right_ema_dx = rospy.Publisher('lane_change/right/ema_dx', Float32, queue_size=10)
+        self.pub_right_ema_ddx = rospy.Publisher('lane_change/right/ema_ddx', Float32, queue_size=10)
         self.pub_right_flag = rospy.Publisher('lane_change/right/flag', Int16, queue_size=10)
 
         self.left_triggered = False
@@ -190,7 +207,7 @@ class LaneChangeChecker:
         return False
 
     def _publish_metrics(self, pubs, values, invalid_value):
-        # pubs: list [x, dx, ddx, ma, ema]
+        # pubs: list [x, dx, ddx, ma, ema, ema_dx, ema_ddx]
         out = []
         for v in values:
             out.append(v if v is not None and _finite(v) else invalid_value)
@@ -199,6 +216,8 @@ class LaneChangeChecker:
         pubs[2].publish(Float32(out[2]))
         pubs[3].publish(Float32(out[3]))
         pubs[4].publish(Float32(out[4]))
+        pubs[5].publish(Float32(out[5]))
+        pubs[6].publish(Float32(out[6]))
 
     def timer_callback(self, event):
         if self.latest_lines is None:
@@ -229,13 +248,19 @@ class LaneChangeChecker:
 
         # Publish metrics
         self._publish_metrics(
-            [self.pub_left_x, self.pub_left_dx, self.pub_left_ddx, self.pub_left_ma, self.pub_left_ema],
-            left_metrics if left_metrics else [None] * 5,
+            [
+                self.pub_left_x, self.pub_left_dx, self.pub_left_ddx,
+                self.pub_left_ma, self.pub_left_ema, self.pub_left_ema_dx, self.pub_left_ema_ddx
+            ],
+            left_metrics if left_metrics else [None] * 7,
             self.invalid_value
         )
         self._publish_metrics(
-            [self.pub_right_x, self.pub_right_dx, self.pub_right_ddx, self.pub_right_ma, self.pub_right_ema],
-            right_metrics if right_metrics else [None] * 5,
+            [
+                self.pub_right_x, self.pub_right_dx, self.pub_right_ddx,
+                self.pub_right_ma, self.pub_right_ema, self.pub_right_ema_dx, self.pub_right_ema_ddx
+            ],
+            right_metrics if right_metrics else [None] * 7,
             self.invalid_value
         )
 
