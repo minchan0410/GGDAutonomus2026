@@ -12,12 +12,6 @@
     <!-- lane_change_checker -->
     <node pkg="lane_detection" type="lane_change_checker.py" name="lane_change_checker" output="screen" />
 
-    <!-- rqt_multiplot (auto start, left/right) -->
-    <node pkg="rqt_multiplot" type="rqt_multiplot" name="rqt_multiplot_left" output="screen"
-          args="--config $(find lane_detection)/config/lane_change_left_multiplot.xml" />
-    <node pkg="rqt_multiplot" type="rqt_multiplot" name="rqt_multiplot_right" output="screen"
-          args="--config $(find lane_detection)/config/lane_change_right_multiplot.xml" />
-
     <!-- <node pkg="lane_detection" type="cur_lane_detector.py" name="cur_lane_detector" output="screen">
         <rosparam command="load" file="$(find lane_detection)/config/cur_lane_detector.yaml" />
     </node> -->
