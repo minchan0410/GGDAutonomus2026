@@ -6,8 +6,6 @@ final_planner_rviz:
   publish_rate: 20.0
   marker_topic: "/final_planner/markers"
   base_frame: "base_link"
-  ultrasonic_frame: "ultrasonic_1_link"
-
   hud:
     # HUD 오버레이 박스 위치/크기 (화면 픽셀 기준)
     # left/top은 RViz 화면 좌상단을 (0,0)으로 한 기준 좌표
@@ -30,13 +28,6 @@ final_planner_rviz:
     z: 0.05
     thickness: 0.02
     alpha: 0.25
-
-  ultrasonic:
-    # 초음파 바 마커의 위치/두께/투명도 설정 (RViz 표시용)
-    bar_y: 0.03
-    bar_z: 0.03
-    z_offset: 0.0
-    alpha: 0.8
 
   text3d:
     # 3D 텍스트 마커 사용 여부

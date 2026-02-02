@@ -43,11 +43,10 @@ pre_final_planner/
   - `p`: PRE (lane_steer + 고정 속도)
 
 ### `final_planner.py`
-차선 주행, 장애물 회피(초음파/YOLO), 교차선/신호 대응을 포함한 **최종 주행 로직**입니다.
+차선 주행, 장애물 회피(YOLO), 교차선/신호 대응을 포함한 **최종 주행 로직**입니다.
 
 - 입력
   - `/lane_steer` (std_msgs/Int16)
-  - `/ultrasonic` (std_msgs/Int16)
   - `/cur_lane` (std_msgs/Int16)
   - `/car_projected` (geometry_msgs/PointStamped)
   - `/traffic` (std_msgs/Int16)
@@ -57,21 +56,18 @@ pre_final_planner/
   - `/motor_cmd_long` (std_msgs/Int16)
   - `/final_planner/state` (std_msgs/String)
   - `/final_planner/yolo_crash` (std_msgs/Bool)
-  - `/final_planner/sonic_crash` (std_msgs/Bool)
   - `/final_planner/lane_change_reason` (std_msgs/String)
 - 키보드
   - `d`: DEFAULT (정지/기본 출력)
   - `f`: FINAL (최종 주행 로직 실행)
 
 ### `final_planner_rviz.py`
-Final planner 상태를 **ROI/초음파 바/텍스트 HUD**로 시각화합니다.
+Final planner 상태를 **ROI/텍스트 HUD**로 시각화합니다.
 
 - 입력
   - `/final_planner/state` (std_msgs/String)
   - `/final_planner/yolo_crash` (std_msgs/Bool)
-  - `/final_planner/sonic_crash` (std_msgs/Bool)
   - `/final_planner/lane_change_reason` (std_msgs/String)
-  - `/ultrasonic1` (std_msgs/Int16)  
 - 출력
   - `/final_planner/markers` (visualization_msgs/MarkerArray)
   - `/final_planner/hud` (jsk_rviz_plugins/OverlayText)
@@ -102,7 +98,7 @@ roslaunch pre_final_planner final_planner.launch
 ## 주요 파라미터
 
 - `config/final_planner.yaml`
-  - `planner_common/roi/*`, `planner_common/ultrasonic/*`
+  - `planner_common/roi/*`
   - `final_planner/speed_*`, `lc_steer`, `steer_time*`, `straight_time*`
   - `final_planner/*_count_threshold`, `traffic_*`
 - `config/final_planner_rviz.yaml`
@@ -114,4 +110,3 @@ roslaunch pre_final_planner final_planner.launch
 
 패키지 선언: `roscpp`, `rospy`, `std_msgs`  
 스크립트 사용: `geometry_msgs`, `visualization_msgs`, `nav_msgs`, `jsk_rviz_plugins`, `numpy`
-

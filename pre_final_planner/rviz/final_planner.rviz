@@ -72,26 +72,6 @@ Visualization Manager:
           Alpha: 1
           Show Axes: false
           Show Trail: false
-        ultrasonic_0_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        ultrasonic_1_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        ultrasonic_2_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        ultrasonic_3_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        ultrasonic_4_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
       Name: RobotModel
       Robot Description: robot_description
       TF Prefix: ""
@@ -109,16 +89,6 @@ Visualization Manager:
           Value: true
         camera_link:
           Value: true
-        ultrasonic_0_link:
-          Value: false
-        ultrasonic_1_link:
-          Value: true
-        ultrasonic_2_link:
-          Value: false
-        ultrasonic_3_link:
-          Value: false
-        ultrasonic_4_link:
-          Value: false
       Marker Alpha: 1
       Marker Scale: 1
       Name: TF
@@ -128,16 +98,6 @@ Visualization Manager:
       Tree:
         base_link:
           camera_link:
-            {}
-          ultrasonic_0_link:
-            {}
-          ultrasonic_1_link:
-            {}
-          ultrasonic_2_link:
-            {}
-          ultrasonic_3_link:
-            {}
-          ultrasonic_4_link:
             {}
       Update Interval: 0
       Value: true

@@ -5,11 +5,6 @@ planner_common:
     # offset_x는 ROI를 전방으로 이동시키는 보정값
     offset_x: 0.7
     radius: 1.2
-  ultrasonic:
-    # 초음파 센서 값 전처리 설정
-    # threshold를 넘는 값만 유효로 판단, unit_scale로 단위 변환
-    threshold: 800.0
-    unit_scale: 0.001 # mm -> m
 
 final_planner:
   # 플래너 주기/행동 파라미터 및 임계값
@@ -40,7 +35,6 @@ final_planner:
 
   queues_maxlen: 5
   yolo_count_threshold: 3
-  ultrasonic_count_threshold: 3
   traffic_green_threshold: 3
   traffic_green_timeout: 60.0
 
@@ -52,12 +46,6 @@ final_planner:
 #     min_y: -0.5
 #     max_y: 0.5 #왼쪽
 #     offset_x: 0.7
-#   ultrasonic:
-#     # 초음파 센서 값 전처리 설정
-#     # threshold를 넘는 값만 유효로 판단, unit_scale로 단위 변환
-#     threshold: 800.0
-#     unit_scale: 0.001   # mm -> m
-
 # final_planner:
 #   # 플래너 주기/행동 파라미터 및 임계값
 #   # speed_*는 모터 명령 스케일 기준 (시스템 스케일에 맞춰 조정)
