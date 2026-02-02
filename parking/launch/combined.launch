@@ -24,7 +24,9 @@
     <node name="stanley" pkg="parking" type="stanley.py" output="screen" />
     
     <!-- Lane Controller-->
-    <node name="run" pkg="lane_detection" type="run.py" output="screen" />
+    <node name="run" pkg="lane_detection" type="run.py" output="log">
+      <param name="show_debug" value="false" />
+    </node>
     
     
     <!-- Parking Planner-->

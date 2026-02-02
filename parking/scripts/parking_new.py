@@ -17,36 +17,16 @@ class Parking:
         rospy.init_node("parking")
         self.load_params()
         
-        rospy.Subscriber("/ultrasonic1", Int16, self.ultrasonic1_callback, queue_size=1)
-        rospy.Subscriber("/ultrasonic3", Int16, self.ultrasonic3_callback, queue_size=1)
-        rospy.Subscriber("/ultrasonic4", Int16, self.ultrasonic4_callback, queue_size=1)
-        rospy.Subscriber("/ultrasonic5", Int16, self.ultrasonic5_callback, queue_size=1)
-        rospy.Subscriber("/detection_poses",PoseArray,self.detection_poses_callback,queue_size=1)
-        rospy.Subscriber("/parking_lane_steer", Int16, self.lane_steer_callback, queue_size=1)
-        rospy.Subscriber("/parking_stanley_steer", Int16, self.stanley_steer_callback, queue_size=1)
-        rospy.Subscriber("/rosserial_check", Int16, self.rosserial_check_callback, queue_size=1)
-        
-        
-        self.motor_cmd_steer_pub = rospy.Publisher("/des_steer", Int16, queue_size=1)
-        self.motor_long_pub = rospy.Publisher("/motor_cmd_long", Int16, queue_size=1)
-        self.stanley_path_pub = rospy.Publisher("/stanley_path",Path,queue_size=1)
-        self.dest_marker_pub = rospy.Publisher("/parking_destination_marker",Marker,queue_size=1)
-        self.filtered_points_marker_pub = rospy.Publisher("/filtered_points_marker",Marker,queue_size=1)
-        self.roi_marker_pub = rospy.Publisher("/roi_marker",Marker,queue_size=1)
-        self.debug_text_pub = rospy.Publisher("/debug_overlay_text", OverlayText, queue_size=1, latch=True)
-        
-        self.ultrasonics = [-1, 20000, -1, 20000, 20000, 20000]
         self.rate = rospy.Rate(20)
         
         # ========================================
         # --------------------streak--------------
-        self.parking_lot_streak = 0
         self.first_car_streak   = 0
         self.second_car_streak  = 0
-        self.finish_streak      = 0
         self.parked_streak      = 0
         self.pulled_streak      = 0
         self.lost_first_streak  = 0
+        self.lost_second_streak = 0
         # TODO
         # ========================================
         
@@ -86,8 +66,8 @@ class Parking:
         
         # ========================================
         # --------------------freeze--------------
-        self.freeze_on_serial_loss = rospy.get_param("~freeze_on_serial_loss", True)
         self.frozen                = False
+        self.freeze_on_serial_loss = rospy.get_param("~freeze_on_serial_loss", True)
         self.frozen_since          = None
         self.ross                  = 0
         self.serial_ok             = True  # rosserial_check == 0 이면 OK
@@ -100,6 +80,7 @@ class Parking:
         
         # ========================================
         # -------------------variable-------------
+        self.ultrasonics     = [-1, 20000, -1, 20000, 20000, 20000]
         self.start_time      = None
         self.first_car       = np.full((1, 2), np.nan)
         self.second_car      = np.full((1, 2), np.nan)
@@ -113,6 +94,28 @@ class Parking:
         th        = threading.Thread(target=self.keyboard_listener, daemon=True)
         th.start()
         # ========================================
+        
+        
+        # ====================================================================================================
+        # ------------------------------------------ PUB & SUB -----------------------------------------------
+        rospy.Subscriber("/ultrasonic1", Int16, self.ultrasonic1_callback, queue_size=1)
+        rospy.Subscriber("/ultrasonic3", Int16, self.ultrasonic3_callback, queue_size=1)
+        rospy.Subscriber("/ultrasonic4", Int16, self.ultrasonic4_callback, queue_size=1)
+        rospy.Subscriber("/ultrasonic5", Int16, self.ultrasonic5_callback, queue_size=1)
+        rospy.Subscriber("/detection_poses",PoseArray,self.detection_poses_callback,queue_size=1)
+        rospy.Subscriber("/parking_lane_steer", Int16, self.lane_steer_callback, queue_size=1)
+        rospy.Subscriber("/parking_stanley_steer", Int16, self.stanley_steer_callback, queue_size=1)
+        rospy.Subscriber("/rosserial_check", Int16, self.rosserial_check_callback, queue_size=1)
+        
+        
+        self.motor_cmd_steer_pub = rospy.Publisher("/des_steer", Int16, queue_size=1)
+        self.motor_long_pub = rospy.Publisher("/motor_cmd_long", Int16, queue_size=1)
+        self.stanley_path_pub = rospy.Publisher("/stanley_path",Path,queue_size=1)
+        self.dest_marker_pub = rospy.Publisher("/parking_destination_marker",Marker,queue_size=1)
+        self.filtered_points_marker_pub = rospy.Publisher("/filtered_points_marker",Marker,queue_size=1)
+        self.roi_marker_pub = rospy.Publisher("/roi_marker",Marker,queue_size=1)
+        self.debug_text_pub = rospy.Publisher("/debug_overlay_text", OverlayText, queue_size=1, latch=True)
+        # ====================================================================================================
         
         
         # ====================================================================================================
@@ -407,6 +410,7 @@ class Parking:
         self.first_car_streak += 1
 
         if self.first_car_streak >= 5:
+            self.first_car_streak = 0
             self.first_car_detected = True
             self.clear_roi_markers()
             self.first_car = point
@@ -425,6 +429,7 @@ class Parking:
         self.second_car_streak += 1
         
         if self.second_car_streak >= 5:
+            self.second_car_streak = 0
             self.second_car_detected = True
             self.clear_roi_markers()
             self.second_car = point
@@ -449,16 +454,21 @@ class Parking:
             if self.lost_first:
                 rospy.logwarn(f"!!!! first car updated again !!! dist: {min_dist:.2f}")
                 self.lost_first = False
+                self.lost_first_streak = 0
             else:
-                rospy.loginfo_throttle(0.5,f"first car updated, dist: {min_dist:.2f}")
+                rospy.loginfo_throttle(0.5,f"first car updated, dist: {min_dist:.2f}, tried: {self.lost_first_streak + 1}")
+                self.lost_first_streak = 0
             return True
         else:
             self.lost_first_streak += 1
             if self.lost_first_streak >= 3:
                 rospy.logwarn(f"!!!! first car update false !!! dist: {min_dist:.2f}")
+                self.lost_first_streak = 0
                 self.first_car_detected = False
                 self.lost_first = True
                 return False
+            return False
+            
     
     def track_second_car(self, point):
         """
@@ -479,14 +489,21 @@ class Parking:
             if self.lost_second:
                 rospy.logwarn(f"!!!! second car updated again !!! dist: {min_dist:.2f}")
                 self.lost_second = False
+                self.lost_second_streak = 0
             else:
-                rospy.loginfo_throttle(0.5,f"second car updated, dist: {min_dist:.2f}")
+                rospy.loginfo_throttle(0.5,f"second car updated, dist: {min_dist:.2f}, tried: {self.lost_second_streak + 1}")
+                self.lost_second_streak = 0
             return True
         else:
-            rospy.logwarn(f"!!!! second car update false !!! dist: {min_dist:.2f}")
-            self.second_car_detected = False
-            self.lost_second = True
+            self.lost_second_streak += 1
+            if self.lost_second_streak >= 3:
+                rospy.logwarn(f"!!!! second car update false !!! dist: {min_dist:.2f}")
+                self.lost_second_streak = 0
+                self.second_car_detected = False
+                self.lost_second = True
+                return False
             return False
+
     
     def determine_can_parking(self, points):
         self.can_park_TH = points[0, 1] + points[1, 1]
@@ -610,7 +627,7 @@ class Parking:
             
             if all(x < self.ULTRASONIC_THRESHOLD for x in sonics_to_use1):
                 self.parked_streak += 1
-                if self.parked_streak >= 20:
+                if self.parked_streak >= 10:
                     self.parked = True
             else:
                 self.parked_streak = max(0, self.parked_streak - 1)
@@ -1003,19 +1020,24 @@ class Parking:
             f"right front   : {self.ultrasonics[3]}\n"
             f"left rear   : {self.ultrasonics[4]}\n"
             f"right rear   : {self.ultrasonics[5]}\n"
-            f"threshold   : {self.ULTRASONIC_THRESHOLD}\n"
-            f"steak   : {self.parked_streak}\n\n"
+            f"threshold   : {self.ULTRASONIC_THRESHOLD}\n\n"
+            f"STREAK\n"
+            f"first_car: {self.first_car_streak}\n"
+            f"second_car: {self.second_car_streak}\n"
+            f"first_lost: {self.lost_first_streak}\n"
+            f"second_lost: {self.lost_second_streak}\n"
+            f"parked: {self.parked_streak}\n"
+            f"pulled: {self.pulled_streak}\n\n"
             f"rosserial   : {serial_text}\n"
         )
-
         msg = OverlayText()
         msg.text = text
 
         # ---------- 화면 고정 위치 ----------
         msg.left   = 10     # 좌측 상단
         msg.top    = 10
-        msg.width  = 420
-        msg.height = 380
+        msg.width  = 520
+        msg.height = 520
         msg.text_size = 10
 
         # ---------- 색상 ----------
