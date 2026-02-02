@@ -3,7 +3,6 @@ pub_car_projected_topic: /car_projected
 pub_markers_topic: /car_projected_markers
 
 frame_id: base_link
-select_nearest: true
 
 #해상도 1280*720 일때 내적 파라미터
 # camera:

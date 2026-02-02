@@ -4,8 +4,8 @@ import math
 import threading
 
 from vision_msgs.msg import Detection2DArray
-from geometry_msgs.msg import PointStamped
-from visualization_msgs.msg import Marker
+from geometry_msgs.msg import PoseArray, Pose
+from visualization_msgs.msg import Marker, MarkerArray
 from std_msgs.msg import Header
 
 
@@ -18,7 +18,6 @@ class ObjectProjectionNode:
 
         # behavior
         self.frame_id = rospy.get_param("~frame_id", "")
-        self.select_nearest = bool(rospy.get_param("~select_nearest", True))
         self.pub_rate = float(rospy.get_param("~pub_rate", 20.0))  # 반드시 20Hz
 
         # camera intrinsics/extrinsics (simple ground projection)
@@ -48,12 +47,13 @@ class ObjectProjectionNode:
 
         # ROS I/O
         self.sub = rospy.Subscriber(self.sub_car_topic, Detection2DArray, self.cb, queue_size=1)
-        self.pub_pt = rospy.Publisher(self.pub_pt_topic, PointStamped, queue_size=1)
-        self.pub_mk = rospy.Publisher(self.pub_mk_topic, Marker, queue_size=1) if self.mk_enable else None
+        self.pub_pt = rospy.Publisher(self.pub_pt_topic, PoseArray, queue_size=1)
+        self.pub_mk = rospy.Publisher(self.pub_mk_topic, MarkerArray, queue_size=1) if self.mk_enable else None
 
         # keep latest message only
         self._lock = threading.Lock()
         self._latest_msg = None
+        self._last_marker_count = 0
 
         # 20Hz loop
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.pub_rate), self.on_timer)
@@ -129,7 +129,7 @@ class ObjectProjectionNode:
         header.stamp = rospy.Time.now()
         header.frame_id = self.frame_id  # 프레임 통일
 
-        best = None  # (X, Y)
+        poses = []
 
         if msg is not None:
             for det in msg.detections:
@@ -138,37 +138,43 @@ class ObjectProjectionNode:
                 xy = self.project(u, v)
                 if xy is None:
                     continue
-                if best is None:
-                    best = xy
-                elif self.select_nearest and xy[0] < best[0]:
-                    best = xy
+                p = Pose()
+                p.position.x = float(xy[0])
+                p.position.y = float(xy[1])
+                p.position.z = 0.0
+                p.orientation.x = 0.0
+                p.orientation.y = 0.0
+                p.orientation.z = 0.0
+                p.orientation.w = 0.0
+                poses.append(p)
 
-        # --- PointStamped: 항상 publish (없으면 NaN) ---
-        pt = PointStamped()
-        pt.header = header
-        if best is None:
-            nan = float("nan")
-            pt.point.x = nan
-            pt.point.y = nan
-            pt.point.z = nan
-        else:
-            pt.point.x = float(best[0])
-            pt.point.y = float(best[1])
-            pt.point.z = 0.0
-        self.pub_pt.publish(pt)
+        # --- PoseArray: 항상 publish (없으면 빈 배열) ---
+        pa = PoseArray()
+        pa.header = header
+        pa.poses = poses
+        self.pub_pt.publish(pa)
 
-        # --- Marker: 시각화용 (없으면 DELETE로 RViz에서 사라지게) ---
+        # --- MarkerArray: 시각화용 ---
         if self.mk_enable and (self.pub_mk is not None):
-            m = self._base_marker(header)
-            if best is None:
-                m.action = Marker.DELETE
-                self.pub_mk.publish(m)
-            else:
+            arr = MarkerArray()
+            for idx, pose in enumerate(poses):
+                m = self._base_marker(header)
+                m.id = idx
                 m.action = Marker.ADD
-                m.pose.position.x = pt.point.x
-                m.pose.position.y = pt.point.y
+                m.pose.position.x = pose.position.x
+                m.pose.position.y = pose.position.y
                 m.pose.position.z = float(self.mk_z)
-                self.pub_mk.publish(m)
+                arr.markers.append(m)
+
+            # delete leftover markers if count decreased
+            for idx in range(len(poses), self._last_marker_count):
+                mdel = self._base_marker(header)
+                mdel.id = idx
+                mdel.action = Marker.DELETE
+                arr.markers.append(mdel)
+
+            self._last_marker_count = len(poses)
+            self.pub_mk.publish(arr)
 
 
 if __name__ == "__main__":
