@@ -172,6 +172,159 @@ Visualization Manager:
       Topic: /detection_poses_viz
       Unreliable: false
       Value: true
+
+    - Alpha: 0.10000000149011612
+      Class: rviz/Map
+      Color Scheme: costmap
+      Draw Behind: false
+      Enabled: true
+      Name: Map
+      Topic: /local_costmap
+      Unreliable: false
+      Use Timestamp: false
+      Value: true
+
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /parking_destination_marker
+      Name: ParkingDestination
+      Namespaces:
+        {}
+      Queue Size: 100
+      Value: true
+
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /stanley_debug
+      Name: StanleyDebug
+      Namespaces:
+        {}
+      Queue Size: 100
+      Value: true
+
+    - Align Bottom: false
+      Background Alpha: 0.6000000238418579
+      Background Color: 0; 0; 0
+      Class: jsk_rviz_plugin/OverlayText
+      Enabled: true
+      Foreground Alpha: 0.800000011920929
+      Foreground Color: 255; 255; 255
+      Invert Shadow: false
+      Name: DebugOverlay
+      Overtake BG Color Properties: false
+      Overtake FG Color Properties: false
+      Overtake Position Properties: false
+      Topic: /debug_overlay_text
+      Value: true
+      font: DejaVu Sans Mono
+      height: 128
+      left: 0
+      line width: 2
+      text size: 12
+      top: 0
+      width: 128
+
+    - Align Bottom: false
+      Background Alpha: 0.6000000238418579
+      Background Color: 0; 0; 0
+      Class: jsk_rviz_plugin/OverlayText
+      Enabled: true
+      Foreground Alpha: 0.800000011920929
+      Foreground Color: 255; 255; 255
+      Invert Shadow: false
+      Name: StanleyDebugOverlay
+      Overtake BG Color Properties: false
+      Overtake FG Color Properties: false
+      Overtake Position Properties: false
+      Topic: /stanley_debug_text
+      Value: true
+      font: DejaVu Sans Mono
+      height: 128
+      left: 0
+      line width: 2
+      text size: 12
+      top: 0
+      width: 128
+
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /roi_marker
+      Name: ROI
+      Namespaces:
+        roi_fill: true
+      Queue Size: 10
+      Value: true
+
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /filtered_points_marker
+      Name: FilteredPointsCircles
+      Namespaces:
+        {}
+      Queue Size: 100
+      Value: true
+
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /filtered_points_marker
+      Name: FilteredPointsLine
+      Namespaces:
+        {}
+      Queue Size: 100
+      Value: true
+
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /stanley_debug
+      Name: StanleyMotionYaw
+      Namespaces:
+        {}
+      Queue Size: 100
+      Value: true
+
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /stanley_debug
+      Name: StanleyPathYaw
+      Namespaces:
+        {}
+      Queue Size: 100
+      Value: true
+
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /stanley_debug
+      Name: StanleyErrors
+      Namespaces:
+        {}
+      Queue Size: 100
+      Value: true
+
+    - Alpha: 1
+      Buffer Length: 1
+      Class: rviz/Path
+      Color: 255; 255; 0
+      Enabled: true
+      Head Diameter: 0.30000001192092896
+      Head Length: 0.20000000298023224
+      Length: 0.30000001192092896
+      Line Style: Lines
+      Line Width: 0.029999999329447746
+      Name: StanleyPath
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Color: 255; 85; 255
+      Pose Style: None
+      Queue Size: 10
+      Radius: 0.029999999329447746
+      Shaft Diameter: 0.10000000149011612
+      Shaft Length: 0.10000000149011612
+      Topic: /stanley_path
+      Unreliable: false
+      Value: true
+
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
