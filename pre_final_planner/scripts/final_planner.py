@@ -232,7 +232,7 @@ class FinalPlanner:
 
         # Process each detected point in the PoseArray
         for pose in msg.poses:
-            x = pose.position.x
+            x = pose.position.x - self.roi_offset_x
             y = pose.position.y
 
             distance = math.sqrt(x**2 + y**2)
@@ -542,7 +542,7 @@ class FinalPlanner:
                             if ld1_elapsed >= self.lane_driving1_timeout:
                                 self.state = "lane_change_to_left"
                                 self.lane_driving1_start_time = None
-
+                                self.left_lane_change_complete =  False
                 # lane change to left
                 elif self.state == "lane_change_to_left":
 
@@ -562,23 +562,26 @@ class FinalPlanner:
                                     self.state = "lane_driving2"
                                     self.lc_complete_time = None
                                     self.left_lane_change_complete = False
+                                    self.yolo_queue.clear()
+                                    self.yolo_crash= False
                         else:
                             self.lc_complete_time = None
 
                 elif self.state == "lane_driving2":
-
+                    print(list(self.yolo_queue))
                     # STEP 2: 차선 인식 주행 (유지 시간 동안 주행을 계속하고, 만료되면 다음 상태로 전환)
                     self.drive(lane_steer, self.SPEED_HIGH)
                     with self.lock:
                         # YOLO-triggered delayed transition (similar to lane_driving1 behavior)
-                        if self.yolo_crash and (not self._startup_blocked()):
+
+                        if self.yolo_crash:
                             self.state = "lane_change_to_right"
                             self.lane_change_reason = "yolo"
-
+                            self.right_lane_change_complete =  False
+                        
                 elif self.state == "lane_change_to_right":
 
                     # step 3: 우꺽
-                    self.drive(-self.LC_STEER, self.SPEED_HIGH)
                     with self.lock:
                         # clear any lane_driving timers on entry
                         self.lane_driving2_crash_start = None
@@ -588,12 +591,15 @@ class FinalPlanner:
                                 self.lc_complete_time = rospy.Time.now()
                             else:
                                 lc_elapsed = (rospy.Time.now() - self.lc_complete_time).to_sec()
+                                self.drive(0, self.SPEED_HIGH)
                                 if lc_elapsed >= self.right_lc_complete_delay:
                                     # delay elapsed -> move to next state
                                     self.state = "crossline"
                                     self.lc_complete_time = None
                                     self.right_lane_change_complete = False
                         else:
+                            self.drive(-self.LC_STEER, self.SPEED_HIGH)
+
                             self.lc_complete_time = None
 
                 elif self.state == "crossline":
