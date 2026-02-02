@@ -13,7 +13,7 @@ DEFAULT_LANE_LINES_TOPIC = '/lane_lines_px'
 DEFAULT_RATE_HZ = 20.0
 DEFAULT_Y_MID = 240
 DEFAULT_MA_WINDOW = 10
-DEFAULT_EMA_WINDOW = 30
+DEFAULT_EMA_WINDOW = 20
 DEFAULT_INVALID_VALUE = float('nan')
 
 # Thresholds (<=0 disables each check)
@@ -22,12 +22,16 @@ DEFAULT_LEFT_DX_THRESH = -20.0
 DEFAULT_LEFT_DDX_THRESH = -50.0
 DEFAULT_LEFT_MA_THRESH = -0.1
 DEFAULT_LEFT_EMA_THRESH = -0.1
+DEFAULT_LEFT_EMA_DX_THRESH = -0.1
+DEFAULT_LEFT_EMA_DDX_THRESH = -5000.0
 
 DEFAULT_RIGHT_X_THRESH = -0.1
-DEFAULT_RIGHT_DX_THRESH = -20.0
-DEFAULT_RIGHT_DDX_THRESH = -50.0
+DEFAULT_RIGHT_DX_THRESH = -0.0
+DEFAULT_RIGHT_DDX_THRESH = -0.0
 DEFAULT_RIGHT_MA_THRESH = -0.1
 DEFAULT_RIGHT_EMA_THRESH = -0.1
+DEFAULT_RIGHT_EMA_DX_THRESH = -0.1
+DEFAULT_RIGHT_EMA_DDX_THRESH = -0.1
 
 # Absolute comparison options
 #값의 변화를 절대값으로 볼 것인지
@@ -36,6 +40,8 @@ DEFAULT_USE_ABS_DX = True
 DEFAULT_USE_ABS_DDX = True
 DEFAULT_USE_ABS_MA = False
 DEFAULT_USE_ABS_EMA = False
+DEFAULT_USE_ABS_EMA_DX = False
+DEFAULT_USE_ABS_EMA_DDX = False
 
 
 def _finite(val):
@@ -124,6 +130,8 @@ class LaneChangeChecker:
             'ddx': float(_get_param(ns, 'left_ddx_thresh', DEFAULT_LEFT_DDX_THRESH)),
             'ma': float(_get_param(ns, 'left_ma_thresh', DEFAULT_LEFT_MA_THRESH)),
             'ema': float(_get_param(ns, 'left_ema_thresh', DEFAULT_LEFT_EMA_THRESH)),
+            'ema_dx': float(_get_param(ns, 'left_ema_dx_thresh', DEFAULT_LEFT_EMA_DX_THRESH)),
+            'ema_ddx': float(_get_param(ns, 'left_ema_ddx_thresh', DEFAULT_LEFT_EMA_DDX_THRESH)),
         }
         self.right_thresh = {
             'x': float(_get_param(ns, 'right_x_thresh', DEFAULT_RIGHT_X_THRESH)),
@@ -131,6 +139,8 @@ class LaneChangeChecker:
             'ddx': float(_get_param(ns, 'right_ddx_thresh', DEFAULT_RIGHT_DDX_THRESH)),
             'ma': float(_get_param(ns, 'right_ma_thresh', DEFAULT_RIGHT_MA_THRESH)),
             'ema': float(_get_param(ns, 'right_ema_thresh', DEFAULT_RIGHT_EMA_THRESH)),
+            'ema_dx': float(_get_param(ns, 'right_ema_dx_thresh', DEFAULT_RIGHT_EMA_DX_THRESH)),
+            'ema_ddx': float(_get_param(ns, 'right_ema_ddx_thresh', DEFAULT_RIGHT_EMA_DDX_THRESH)),
         }
 
         # Absolute comparison options
@@ -140,6 +150,8 @@ class LaneChangeChecker:
             'ddx': bool(_get_param(ns, 'use_abs_ddx', DEFAULT_USE_ABS_DDX)),
             'ma': bool(_get_param(ns, 'use_abs_ma', DEFAULT_USE_ABS_MA)),
             'ema': bool(_get_param(ns, 'use_abs_ema', DEFAULT_USE_ABS_EMA)),
+            'ema_dx': bool(_get_param(ns, 'use_abs_ema_dx', DEFAULT_USE_ABS_EMA_DX)),
+            'ema_ddx': bool(_get_param(ns, 'use_abs_ema_ddx', DEFAULT_USE_ABS_EMA_DDX)),
         }
 
         self.left_state = SideState(self.ma_window, self.ema_window)
@@ -274,6 +286,8 @@ class LaneChangeChecker:
                 'ddx': left_metrics[2],
                 'ma': left_metrics[3],
                 'ema': left_metrics[4],
+                'ema_dx': left_metrics[5],
+                'ema_ddx': left_metrics[6],
             }
         if right_metrics:
             right_values = {
@@ -282,6 +296,8 @@ class LaneChangeChecker:
                 'ddx': right_metrics[2],
                 'ma': right_metrics[3],
                 'ema': right_metrics[4],
+                'ema_dx': right_metrics[5],
+                'ema_ddx': right_metrics[6],
             }
 
         left_hit = self._check_thresholds(left_values, self.left_thresh) if left_values else False
