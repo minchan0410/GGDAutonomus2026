@@ -3,73 +3,77 @@ planner_common:
     # ROI 범위: 차량 좌표계 기준, 단위는 meters
     # min/max는 ROI 박스의 전/후(x) 및 좌/우(y) 경계
     # offset_x는 ROI를 전방으로 이동시키는 보정값
+    # 전방 ROI 중심 보정값(미터)
     offset_x: 0.7
+    # ROI 반경(미터)
     radius: 1.2
 
 final_planner:
-  # 플래너 주기/행동 파라미터 및 임계값
-  # speed_*는 모터 명령 스케일 기준 (시스템 스케일에 맞춰 조정)
-  # lc_steer는 차선 변경 시 조향 각도(또는 조향량) 크기
-  # steer_time은 조향 입력을 유지하는 시간(초)
-  # straight_time은 조향 복귀 후 직진 유지 시간(초)
-  # queues_maxlen은 내부 큐 최대 길이(상태/센서 기록 길이)
-  # *_count_threshold는 이벤트 확정에 필요한 누적 횟수
+
+  # 루프 주기(Hz)
   rate_hz: 20
+
+  # 기본 모터 명령(수동/DEFAULT 모드)
   default_motor: 0
+
   # 시작 후 일정 시간 동안 상태 변경(차선 변경 트리거) 무시
   state_change_delay_sec: 6.0
+
   # start state: 0 -> 255 램프 가속 시간(초)
   start_ramp_sec: 1.0
+
   # 시리얼 OK 신호가 이 시간 안에 들어와야 준비 상태로 인정 (초)
   serial_timeout_sec: 0.5
-  # 첫번째 차선 주행을 몇 초간 할 것이냐
+
+  # 첫 번째 차선 주행 지속 시간(초)
   lane_driving1_timeout_sec: 10.0
-  # 좌꺽 하는 시간을 얼마나 더 늘릴 것이냐
+
+  # 좌 차선 변경 완료 후 지연 시간(초)
   left_lc_complete_delay_sec: 0.0
-  # 우꺽 하는 시간을 얼마나 더 늘릴 것이냐
+
+  # 우 차선 변경 완료 후 지연 시간(초)
   right_lc_complete_delay_sec: 0.0
 
+  # 정지 속도 명령 값
   speed_0: 0
+  # 중간 속도 명령 값
   speed_mid: 255
+  # 고속 속도 명령 값
   speed_high: 255
+  # 차선 변경 시 조향 명령 크기
   lc_steer: 22.5
 
-  steer_time1: 5.0 #2.3
-  straight_time1: 1.5
-  steer_time2: 1.8
-  straight_time2: 0.0
-  steer_time3: 0.8
 
+ 
+  # 내부 큐 최대 길이
   queues_maxlen: 5
+  # YOLO 충돌 판단 누적 횟수 임계
   yolo_count_threshold: 3
+  # 신호등 초록 인식 누적 횟수 임계
   traffic_green_threshold: 3
+  # 신호 대기 최대 시간(초)
   traffic_green_timeout: 60.0
 
-#     # ROI 범위: 차량 좌표계 기준, 단위는 meters
-#     # min/max는 ROI 박스의 전/후(x) 및 좌/우(y) 경계
-#     # offset_x는 ROI를 전방으로 이동시키는 보정값
-#     min_x: 0.0
-#     max_x: 1.2
-#     min_y: -0.5
-#     max_y: 0.5 #왼쪽
-#     offset_x: 0.7
-# final_planner:
-#   # 플래너 주기/행동 파라미터 및 임계값
-#   # speed_*는 모터 명령 스케일 기준 (시스템 스케일에 맞춰 조정)
-#   # lc_steer는 차선 변경 시 조향 각도(또는 조향량) 크기
-#   # steer_time은 조향 입력을 유지하는 시간(초)
-#   # straight_time은 조향 복귀 후 직진 유지 시간(초)
-#   # queues_maxlen은 내부 큐 최대 길이(상태/센서 기록 길이)
-#   # *_count_threshold는 이벤트 확정에 필요한 누적 횟수
-#   rate_hz: 20
-#   default_motor: 0
-#   speed_0: 0
-#   speed_mid: 255
-#   speed_high: 255
-#   lc_steer: 22.5
 
-#   steer_time1: 1.6
-#   straight_time1: 0.7
-#   steer_time2: 2.3
-#   straight_time2: 0.0
-#   steer_time3: 0.6
+
+  # ---- lane change (run2.py-aligned) ----
+  # 차선 좌표 입력 토픽
+  lane_lines_topic: "/lane_lines_px"
+  # 유효하지 않은 값 표시(그래프용)
+  invalid_value: .nan
+  # 입력 이미지 너비(px)
+  image_width: 640
+  # 입력 이미지 높이(px)
+  image_height: 480
+  # run2.py 기준 ROI 높이 비율
+  roi_height: 0.45
+  # 라인 미검출 시 ROI 경계로 클램핑 여부
+  clamp_to_roi: true
+  # 좌측 EMA 윈도우 크기
+  left_ema_window: 20
+  # 우측 EMA 윈도우 크기
+  right_ema_window: 20
+  # 좌측 EMA_DDX 임계값
+  left_ema_ddx_thresh: 7500.0
+  # 우측 EMA_DDX 임계값
+  right_ema_ddx_thresh: 7500.0

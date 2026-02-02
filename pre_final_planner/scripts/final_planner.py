@@ -3,7 +3,7 @@
 
 import rospy
 import threading
-from std_msgs.msg import Int16, Bool, String
+from std_msgs.msg import Int16, Bool, String, Int32MultiArray, Float32
 from geometry_msgs.msg import PointStamped
 from collections import deque
 import math
@@ -22,6 +22,56 @@ STEER_TIME3    = 1
 STRAIGHT_TIME1 = 1
 STRAIGHT_TIME2 = 1
 
+DEFAULT_LANE_LINES_TOPIC = "/lane_lines_px"
+DEFAULT_INVALID_VALUE = float("nan")
+DEFAULT_IMAGE_WIDTH = 640
+DEFAULT_IMAGE_HEIGHT = 480
+DEFAULT_ROI_HEIGHT = 0.45
+DEFAULT_CLAMP_TO_ROI = True
+DEFAULT_LEFT_EMA_WINDOW = 10
+DEFAULT_RIGHT_EMA_WINDOW = 10
+DEFAULT_LEFT_EMA_DDX_THRESH = 50.0
+DEFAULT_RIGHT_EMA_DDX_THRESH = 50.0
+
+
+def _finite(val):
+    return val is not None and not math.isnan(val) and not math.isinf(val)
+
+
+class EmaState:
+    def __init__(self, ema_window):
+        self.ema_window = max(1, int(ema_window))
+        self.ema = None
+        self.last_ema = None
+        self.last_ema_dx = None
+
+    def reset(self):
+        self.ema = None
+        self.last_ema = None
+        self.last_ema_dx = None
+
+    def update(self, x, dt):
+        if not _finite(x) or dt <= 0.0:
+            self.reset()
+            return None
+
+        alpha = 2.0 / (self.ema_window + 1.0)
+        if self.ema is None:
+            self.ema = x
+        else:
+            self.ema = (alpha * x) + (1.0 - alpha) * self.ema
+
+        ema_dx = None
+        ema_ddx = None
+        if self.last_ema is not None:
+            ema_dx = (self.ema - self.last_ema) / dt
+            if self.last_ema_dx is not None:
+                ema_ddx = (ema_dx - self.last_ema_dx) / dt
+
+        self.last_ema = self.ema
+        self.last_ema_dx = ema_dx
+        return self.ema, ema_dx, ema_ddx
+
 
 class FinalPlanner:
     def __init__(self):
@@ -37,6 +87,8 @@ class FinalPlanner:
         rospy.Subscriber("/traffic", Int16, self.traffic_callback, queue_size=1)
         rospy.Subscriber("/crossline", Int16, self.crossline_callback, queue_size=1)
         rospy.Subscriber("/rosserial_check", Int16, self.serial_check_callback, queue_size=1)
+        self.lane_lines_topic = rospy.get_param("~lane_lines_topic", DEFAULT_LANE_LINES_TOPIC)
+        rospy.Subscriber(self.lane_lines_topic, Int32MultiArray, self.lane_lines_callback, queue_size=1)
 
         # ---- pubs (actuation) ----
         self.motor_cmd_steer_pub = rospy.Publisher("/des_steer", Int16, queue_size=1)
@@ -50,6 +102,11 @@ class FinalPlanner:
 
         self.yolo_crash_point_pub = rospy.Publisher("/final_planner/yolo_crash_point", PointStamped, queue_size=1)
         self.last_yolo_true_point = None
+        # ---- lane change debug pubs (plotting) ----
+        self.pub_left_ema = rospy.Publisher("lane_change/left/ema", Float32, queue_size=10)
+        self.pub_left_ema_ddx = rospy.Publisher("lane_change/left/ema_ddx", Float32, queue_size=10)
+        self.pub_right_ema = rospy.Publisher("lane_change/right/ema", Float32, queue_size=10)
+        self.pub_right_ema_ddx = rospy.Publisher("lane_change/right/ema_ddx", Float32, queue_size=10)
 
         self.lock = threading.Lock()
         th = threading.Thread(target=self.keyboard_listener, daemon=True)
@@ -67,16 +124,10 @@ class FinalPlanner:
         self.SPEED_HIGH = rospy.get_param("~speed_high", SPEED_HIGH)
 
         self.LC_STEER = rospy.get_param("~lc_steer", LC_STEER)
-        self.steer_time1 = rospy.get_param("~steer_time1", STEER_TIME1)
-        self.steer_time2 = rospy.get_param("~steer_time2", STEER_TIME2)
-        self.steer_time3 = rospy.get_param("~steer_time3", STEER_TIME3)
-
-        self.straight_time1 = rospy.get_param("~straight_time1", STRAIGHT_TIME1)
-        self.straight_time2 = rospy.get_param("~straight_time2", STRAIGHT_TIME2)
 
         # delay after left lane change complete before transitioning to lane_driving2 (sec)
         self.left_lc_complete_delay = rospy.get_param("~left_lc_complete_delay_sec", 0.0)
-        self.right_lc_complete_delay = rospy.get_param("~right_lc_cmoplete_delay_sec", 0.0)
+        self.right_lc_complete_delay = rospy.get_param("~right_lc_complete_delay_sec", 0.0)
 
         # timeout in lane_driving1 before automatically entering lane_change_to_left (sec)
         self.lane_driving1_timeout = rospy.get_param("~lane_driving1_timeout_sec", 5.0)
@@ -92,6 +143,16 @@ class FinalPlanner:
         self.start_ramp_sec = rospy.get_param("~start_ramp_sec", 3.0)
         # serial readiness gate
         self.serial_timeout_sec = rospy.get_param("~serial_timeout_sec", 0.5)
+        # ---- lane change params (run2.py aligned) ----
+        self.invalid_value = float(rospy.get_param("~invalid_value", DEFAULT_INVALID_VALUE))
+        self.image_width = int(rospy.get_param("~image_width", DEFAULT_IMAGE_WIDTH))
+        self.image_height = int(rospy.get_param("~image_height", DEFAULT_IMAGE_HEIGHT))
+        self.roi_height = float(rospy.get_param("~roi_height", DEFAULT_ROI_HEIGHT))
+        self.clamp_to_roi = bool(rospy.get_param("~clamp_to_roi", DEFAULT_CLAMP_TO_ROI))
+        self.left_ema_window = int(rospy.get_param("~left_ema_window", DEFAULT_LEFT_EMA_WINDOW))
+        self.right_ema_window = int(rospy.get_param("~right_ema_window", DEFAULT_RIGHT_EMA_WINDOW))
+        self.left_ema_ddx_thresh = float(rospy.get_param("~left_ema_ddx_thresh", DEFAULT_LEFT_EMA_DDX_THRESH))
+        self.right_ema_ddx_thresh = float(rospy.get_param("~right_ema_ddx_thresh", DEFAULT_RIGHT_EMA_DDX_THRESH))
 
         # ---- freeze on serial loss (FINAL only) ----
         self.freeze_on_serial_loss = rospy.get_param("~freeze_on_serial_loss", True)
@@ -138,6 +199,18 @@ class FinalPlanner:
         self.serial_ok = False
         self.serial_received = False
         self.serial_last_time = None
+        # ---- lane change state ----
+        self.latest_lines = None
+        self.last_lane_timer_time = None
+        self.left_state = EmaState(self.left_ema_window)
+        self.right_state = EmaState(self.right_ema_window)
+        self.y_top = int(self.image_height * (1.0 - self.roi_height))
+        self.y_mid = int(self.image_height * (1.0 - self.roi_height / 2.0))
+        self.y_bottom = self.image_height
+        self.roi_left_x_mid, self.roi_right_x_mid = self._roi_x_bounds_at_y(self.y_mid)
+
+        period = 1.0 / float(self.rate_hz) if self.rate_hz > 0.0 else 0.05
+        rospy.Timer(rospy.Duration(period), self.lane_change_timer_callback)
         self.run()
 
     # ---------------- callbacks ----------------
@@ -204,6 +277,97 @@ class FinalPlanner:
             self.serial_received = True
             self.serial_ok = (val == 0)
             self.serial_last_time = rospy.Time.now()
+
+    # ---------------- lane change metrics ----------------
+    def lane_lines_callback(self, msg: Int32MultiArray):
+        if not msg.data or len(msg.data) < 8:
+            with self.lock:
+                self.latest_lines = None
+            return
+        with self.lock:
+            self.latest_lines = list(msg.data[:8])
+
+    @staticmethod
+    def _line_valid(line):
+        return line and len(line) == 4 and all(v != -1 for v in line)
+
+    @staticmethod
+    def _interp_x_at_y(line, y):
+        x1, y1, x2, y2 = line
+        if y2 == y1:
+            return None
+        return (float(y) - y1) * (float(x2) - x1) / (float(y2) - y1) + x1
+
+    def _roi_x_bounds_at_y(self, y):
+        cx = self.image_width // 2
+        x_left_bottom = cx - int(self.image_width * 0.5)
+        x_left_top = cx - int(self.image_width * 0.45)
+        x_right_top = cx + int(self.image_width * 0.45)
+        x_right_bottom = cx + int(self.image_width * 0.5)
+
+        if self.y_bottom == self.y_top:
+            return float(x_left_top), float(x_right_top)
+
+        t = (float(y) - self.y_top) / float(self.y_bottom - self.y_top)
+        x_left = x_left_top + t * (x_left_bottom - x_left_top)
+        x_right = x_right_top + t * (x_right_bottom - x_right_top)
+        return float(x_left), float(x_right)
+
+    def lane_change_timer_callback(self, event):
+        with self.lock:
+            latest_lines = self.latest_lines
+
+        if latest_lines is None:
+            return
+
+        if self.last_lane_timer_time is None:
+            self.last_lane_timer_time = event.current_real
+            return
+
+        dt = (event.current_real - self.last_lane_timer_time).to_sec()
+        self.last_lane_timer_time = event.current_real
+        if dt <= 0.0:
+            return
+
+        left_line = latest_lines[0:4]
+        right_line = latest_lines[4:8]
+
+        left_x = None
+        right_x = None
+
+        if self._line_valid(left_line):
+            left_x = self._interp_x_at_y(left_line, self.y_mid)
+        if self._line_valid(right_line):
+            right_x = self._interp_x_at_y(right_line, self.y_mid)
+
+        if self.clamp_to_roi:
+            if not _finite(left_x):
+                left_x = self.roi_left_x_mid
+            if not _finite(right_x):
+                right_x = self.roi_right_x_mid
+
+        left_metrics = self.left_state.update(left_x, dt) if _finite(left_x) else None
+        right_metrics = self.right_state.update(right_x, dt) if _finite(right_x) else None
+
+        left_ema = left_metrics[0] if left_metrics else None
+        left_ema_ddx = left_metrics[2] if left_metrics else None
+        right_ema = right_metrics[0] if right_metrics else None
+        right_ema_ddx = right_metrics[2] if right_metrics else None
+
+        self.pub_left_ema.publish(Float32(left_ema if _finite(left_ema) else self.invalid_value))
+        self.pub_left_ema_ddx.publish(Float32(left_ema_ddx if _finite(left_ema_ddx) else self.invalid_value))
+        self.pub_right_ema.publish(Float32(right_ema if _finite(right_ema) else self.invalid_value))
+        self.pub_right_ema_ddx.publish(Float32(right_ema_ddx if _finite(right_ema_ddx) else self.invalid_value))
+
+        left_hit = _finite(left_ema_ddx) and abs(left_ema_ddx) > self.left_ema_ddx_thresh
+        right_hit = _finite(right_ema_ddx) and abs(right_ema_ddx) > self.right_ema_ddx_thresh
+
+        if left_hit or right_hit:
+            with self.lock:
+                if left_hit:
+                    self.left_lane_change_complete = True
+                if right_hit:
+                    self.right_lane_change_complete = True
 
     # ---------------- keyboard ----------------
     def _log(self, error=False):
