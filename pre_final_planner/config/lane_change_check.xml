@@ -35,7 +35,7 @@
                                         <relative_minimum>-20</relative_minimum>
                                         <type>2</type>
                                     </scale>
-                                    <topic>/lane_change/left/ema</topic>
+                                    <topic>/lane_change/left/x</topic>
                                     <type>std_msgs/Float32</type>
                                 </x_axis>
                                 <y_axis>
@@ -48,7 +48,7 @@
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>1</type>
                                     </scale>
-                                    <topic>/lane_change/left/ema</topic>
+                                    <topic>/lane_change/left/x</topic>
                                     <type>std_msgs/Float32</type>
                                 </y_axis>
                             </axes>
@@ -185,20 +185,20 @@
                                         <relative_minimum>-20</relative_minimum>
                                         <type>2</type>
                                     </scale>
-                                    <topic>/lane_change/left/ema_ddx</topic>
+                                    <topic>/lane_change/left/ddx</topic>
                                     <type>std_msgs/Float32</type>
                                 </x_axis>
                                 <y_axis>
                                     <field>data</field>
                                     <field_type>0</field_type>
                                     <scale>
-                                        <absolute_maximum>20000</absolute_maximum>
-                                        <absolute_minimum>-20000</absolute_minimum>
+                                        <absolute_maximum>100000</absolute_maximum>
+                                        <absolute_minimum>-100000</absolute_minimum>
                                         <relative_maximum>0</relative_maximum>
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>1</type>
                                     </scale>
-                                    <topic>/lane_change/left/ema_ddx</topic>
+                                    <topic>/lane_change/left/ddx</topic>
                                     <type>std_msgs/Float32</type>
                                 </y_axis>
                             </axes>
@@ -224,6 +224,57 @@
                             <subscriber_queue_size>100</subscriber_queue_size>
                             <title>/lane_change/left/ema_ddx</title>
                         </curve_0>
+                        <curve_1>
+                            <axes>
+                                <x_axis>
+                                    <field></field>
+                                    <field_type>1</field_type>
+                                    <scale>
+                                        <absolute_maximum>1000</absolute_maximum>
+                                        <absolute_minimum>0</absolute_minimum>
+                                        <relative_maximum>5</relative_maximum>
+                                        <relative_minimum>-20</relative_minimum>
+                                        <type>2</type>
+                                    </scale>
+                                    <topic>/lane_change/left/complete</topic>
+                                    <type>std_msgs/Bool</type>
+                                </x_axis>
+                                <y_axis>
+                                    <field>data</field>
+                                    <field_type>0</field_type>
+                                    <scale>
+                                        <absolute_maximum>1000</absolute_maximum>
+                                        <absolute_minimum>0</absolute_minimum>
+                                        <relative_maximum>1</relative_maximum>
+                                        <relative_minimum>0</relative_minimum>
+                                        <type>0</type>
+                                    </scale>
+                                    <topic>/lane_change/left/complete</topic>
+                                    <type>std_msgs/Bool</type>
+                                </y_axis>
+                            </axes>
+                            <color>
+                                <custom_color>#000000</custom_color>
+                                <type>1</type>
+                            </color>
+                            <data>
+                                <circular_buffer_capacity>1000</circular_buffer_capacity>
+                                <time_frame_length>10</time_frame_length>
+                                <type>0</type>
+                            </data>
+                            <style>
+                                <lines_interpolate>false</lines_interpolate>
+                                <pen_style>1</pen_style>
+                                <pen_width>1</pen_width>
+                                <render_antialias>false</render_antialias>
+                                <steps_invert>false</steps_invert>
+                                <sticks_baseline>0</sticks_baseline>
+                                <sticks_orientation>2</sticks_orientation>
+                                <type>0</type>
+                            </style>
+                            <subscriber_queue_size>100</subscriber_queue_size>
+                            <title>Untitled Curve</title>
+                        </curve_1>
                     </curves>
                     <legend>
                         <visible>true</visible>
@@ -259,20 +310,20 @@
                                         <relative_minimum>-20</relative_minimum>
                                         <type>2</type>
                                     </scale>
-                                    <topic>/lane_change/right/ema_ddx</topic>
+                                    <topic>/lane_change/right/ddx</topic>
                                     <type>std_msgs/Float32</type>
                                 </x_axis>
                                 <y_axis>
                                     <field>data</field>
                                     <field_type>0</field_type>
                                     <scale>
-                                        <absolute_maximum>20000</absolute_maximum>
-                                        <absolute_minimum>-20000</absolute_minimum>
+                                        <absolute_maximum>100000</absolute_maximum>
+                                        <absolute_minimum>-100000</absolute_minimum>
                                         <relative_maximum>0</relative_maximum>
                                         <relative_minimum>-1000</relative_minimum>
                                         <type>1</type>
                                     </scale>
-                                    <topic>/lane_change/right/ema_ddx</topic>
+                                    <topic>/lane_change/right/ddx</topic>
                                     <type>std_msgs/Float32</type>
                                 </y_axis>
                             </axes>
@@ -298,6 +349,57 @@
                             <subscriber_queue_size>100</subscriber_queue_size>
                             <title>/lane_change/right/ema_ddx</title>
                         </curve_0>
+                        <curve_1>
+                            <axes>
+                                <x_axis>
+                                    <field></field>
+                                    <field_type>1</field_type>
+                                    <scale>
+                                        <absolute_maximum>1000</absolute_maximum>
+                                        <absolute_minimum>0</absolute_minimum>
+                                        <relative_maximum>5</relative_maximum>
+                                        <relative_minimum>-20</relative_minimum>
+                                        <type>2</type>
+                                    </scale>
+                                    <topic>/lane_change/right/complete</topic>
+                                    <type>std_msgs/Bool</type>
+                                </x_axis>
+                                <y_axis>
+                                    <field>data</field>
+                                    <field_type>0</field_type>
+                                    <scale>
+                                        <absolute_maximum>100000</absolute_maximum>
+                                        <absolute_minimum>-100000</absolute_minimum>
+                                        <relative_maximum>0</relative_maximum>
+                                        <relative_minimum>-1000</relative_minimum>
+                                        <type>0</type>
+                                    </scale>
+                                    <topic>/lane_change/right/complete</topic>
+                                    <type>std_msgs/Bool</type>
+                                </y_axis>
+                            </axes>
+                            <color>
+                                <custom_color>#000000</custom_color>
+                                <type>1</type>
+                            </color>
+                            <data>
+                                <circular_buffer_capacity>1000</circular_buffer_capacity>
+                                <time_frame_length>10</time_frame_length>
+                                <type>0</type>
+                            </data>
+                            <style>
+                                <lines_interpolate>false</lines_interpolate>
+                                <pen_style>1</pen_style>
+                                <pen_width>1</pen_width>
+                                <render_antialias>false</render_antialias>
+                                <steps_invert>false</steps_invert>
+                                <sticks_baseline>0</sticks_baseline>
+                                <sticks_orientation>2</sticks_orientation>
+                                <type>0</type>
+                            </style>
+                            <subscriber_queue_size>100</subscriber_queue_size>
+                            <title>Untitled Curve</title>
+                        </curve_1>
                     </curves>
                     <legend>
                         <visible>true</visible>
