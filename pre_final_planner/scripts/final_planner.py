@@ -28,49 +28,13 @@ DEFAULT_IMAGE_WIDTH = 640
 DEFAULT_IMAGE_HEIGHT = 480
 DEFAULT_ROI_HEIGHT = 0.45
 DEFAULT_CLAMP_TO_ROI = True
-DEFAULT_LEFT_EMA_WINDOW = 10
-DEFAULT_RIGHT_EMA_WINDOW = 10
-DEFAULT_LEFT_EMA_DDX_THRESH = 50.0
-DEFAULT_RIGHT_EMA_DDX_THRESH = 50.0
 
 
 def _finite(val):
     return val is not None and not math.isnan(val) and not math.isinf(val)
 
 
-class EmaState:
-    def __init__(self, ema_window):
-        self.ema_window = max(1, int(ema_window))
-        self.ema = None
-        self.last_ema = None
-        self.last_ema_dx = None
-
-    def reset(self):
-        self.ema = None
-        self.last_ema = None
-        self.last_ema_dx = None
-
-    def update(self, x, dt):
-        if not _finite(x) or dt <= 0.0:
-            self.reset()
-            return None
-
-        alpha = 2.0 / (self.ema_window + 1.0)
-        if self.ema is None:
-            self.ema = x
-        else:
-            self.ema = (alpha * x) + (1.0 - alpha) * self.ema
-
-        ema_dx = None
-        ema_ddx = None
-        if self.last_ema is not None:
-            ema_dx = (self.ema - self.last_ema) / dt
-            if self.last_ema_dx is not None:
-                ema_ddx = (ema_dx - self.last_ema_dx) / dt
-
-        self.last_ema = self.ema
-        self.last_ema_dx = ema_dx
-        return self.ema, ema_dx, ema_ddx
+# EMA-based helper removed — using raw ddx + rolling-distance gating now
 
 
 class FinalPlanner:
@@ -103,10 +67,16 @@ class FinalPlanner:
         self.yolo_crash_point_pub = rospy.Publisher("/final_planner/yolo_crash_point", PointStamped, queue_size=1)
         self.last_yolo_true_point = None
         # ---- lane change debug pubs (plotting) ----
-        self.pub_left_ema = rospy.Publisher("lane_change/left/ema", Float32, queue_size=10)
-        self.pub_left_ema_ddx = rospy.Publisher("lane_change/left/ema_ddx", Float32, queue_size=10)
-        self.pub_right_ema = rospy.Publisher("lane_change/right/ema", Float32, queue_size=10)
-        self.pub_right_ema_ddx = rospy.Publisher("lane_change/right/ema_ddx", Float32, queue_size=10)
+        # Publishers for raw dx/ddx values (for plotting/debug)
+        self.pub_left_x = rospy.Publisher('lane_change/left/x', Float32, queue_size=10)
+        self.pub_right_x = rospy.Publisher('lane_change/right/x', Float32, queue_size=10)
+        self.pub_left_dx = rospy.Publisher('lane_change/left/dx', Float32, queue_size=10)
+        self.pub_left_ddx = rospy.Publisher('lane_change/left/ddx', Float32, queue_size=10)
+        self.pub_right_dx = rospy.Publisher('lane_change/right/dx', Float32, queue_size=10)
+        self.pub_right_ddx = rospy.Publisher('lane_change/right/ddx', Float32, queue_size=10)
+        # Publishers for lane change completion flags
+        self.pub_left_complete = rospy.Publisher('lane_change/left/complete', Bool, queue_size=10)
+        self.pub_right_complete = rospy.Publisher('lane_change/right/complete', Bool, queue_size=10)
 
         self.lock = threading.Lock()
         th = threading.Thread(target=self.keyboard_listener, daemon=True)
@@ -154,10 +124,14 @@ class FinalPlanner:
         self.image_height = int(rospy.get_param("~image_height", DEFAULT_IMAGE_HEIGHT))
         self.roi_height = float(rospy.get_param("~roi_height", DEFAULT_ROI_HEIGHT))
         self.clamp_to_roi = bool(rospy.get_param("~clamp_to_roi", DEFAULT_CLAMP_TO_ROI))
-        self.left_ema_window = int(rospy.get_param("~left_ema_window", DEFAULT_LEFT_EMA_WINDOW))
-        self.right_ema_window = int(rospy.get_param("~right_ema_window", DEFAULT_RIGHT_EMA_WINDOW))
-        self.left_ema_ddx_thresh = float(rospy.get_param("~left_ema_ddx_thresh", DEFAULT_LEFT_EMA_DDX_THRESH))
-        self.right_ema_ddx_thresh = float(rospy.get_param("~right_ema_ddx_thresh", DEFAULT_RIGHT_EMA_DDX_THRESH))
+
+        # New gating params (raw ddx + rolling distance)
+        # window size (number of samples) for rolling distance
+        self.lc_window_size = int(rospy.get_param("~lc_window_size", 5))
+        # minimum pixel displacement within window
+        self.lc_dist_threshold = float(rospy.get_param("~lc_dist_threshold", 200.0))
+        # ddx threshold (absolute)
+        self.lc_ddx_threshold = float(rospy.get_param("~lc_ddx_threshold", 30000.0))
 
         # ---- freeze on serial loss (FINAL only) ----
         self.freeze_on_serial_loss = rospy.get_param("~freeze_on_serial_loss", True)
@@ -207,12 +181,17 @@ class FinalPlanner:
         # ---- lane change state ----
         self.latest_lines = None
         self.last_lane_timer_time = None
-        self.left_state = EmaState(self.left_ema_window)
-        self.right_state = EmaState(self.right_ema_window)
+        # EMA states removed; raw-history buffers used for gating
         self.y_top = int(self.image_height * (1.0 - self.roi_height))
         self.y_mid = int(self.image_height * (1.0 - self.roi_height / 2.0))
         self.y_bottom = self.image_height
         self.roi_left_x_mid, self.roi_right_x_mid = self._roi_x_bounds_at_y(self.y_mid)
+
+        # history buffers for raw-based gating
+        self.left_hist = deque(maxlen=self.lc_window_size)  # stores tuples (t_sec, x)
+        self.right_hist = deque(maxlen=self.lc_window_size)
+        self.left_last_dx = None
+        self.right_last_dx = None
 
         period = 1.0 / float(self.rate_hz) if self.rate_hz > 0.0 else 0.05
         rospy.Timer(rospy.Duration(period), self.lane_change_timer_callback)
@@ -380,28 +359,112 @@ class FinalPlanner:
             if not _finite(right_x):
                 right_x = self.roi_right_x_mid
 
-        left_metrics = self.left_state.update(left_x, dt) if _finite(left_x) else None
-        right_metrics = self.right_state.update(right_x, dt) if _finite(right_x) else None
+        # EMA metrics removed; using raw-based gating below
 
-        left_ema = left_metrics[0] if left_metrics else None
-        left_ema_ddx = left_metrics[2] if left_metrics else None
-        right_ema = right_metrics[0] if right_metrics else None
-        right_ema_ddx = right_metrics[2] if right_metrics else None
+        # --- Raw-based gating (replace EMA-ddx gating) ---
+        # Append current sample (time, x) to history buffers
+        t_sec = event.current_real.to_sec()
+        # prepare values for publishing
+        left_dx_val = None
+        left_ddx_val = None
+        right_dx_val = None
+        right_ddx_val = None
 
-        self.pub_left_ema.publish(Float32(left_ema if _finite(left_ema) else self.invalid_value))
-        self.pub_left_ema_ddx.publish(Float32(left_ema_ddx if _finite(left_ema_ddx) else self.invalid_value))
-        self.pub_right_ema.publish(Float32(right_ema if _finite(right_ema) else self.invalid_value))
-        self.pub_right_ema_ddx.publish(Float32(right_ema_ddx if _finite(right_ema_ddx) else self.invalid_value))
+        # LEFT
+        if _finite(left_x):
+            # push sample
+            self.left_hist.append((t_sec, float(left_x)))
+            # compute dx and ddx using raw samples
+            left_hit = False
+            left_dx_val = None
+            left_ddx_val = None
+            if len(self.left_hist) >= 2:
+                # last two samples
+                t1, x1 = self.left_hist[-2]
+                t2, x2 = self.left_hist[-1]
+                dt_sample = t2 - t1 if (t2 - t1) != 0 else None
+                left_dx = None
+                left_ddx = None
+                if dt_sample is not None and dt_sample > 0:
+                    left_dx = (x2 - x1) / dt_sample
+                    if self.left_last_dx is not None:
+                        left_ddx = (left_dx - self.left_last_dx) / dt_sample
+                    self.left_last_dx = left_dx
+                    left_dx_val = left_dx
+                    left_ddx_val = left_ddx
 
-        left_hit = _finite(left_ema_ddx) and abs(left_ema_ddx) > self.left_ema_ddx_thresh
-        right_hit = _finite(right_ema_ddx) and abs(right_ema_ddx) > self.right_ema_ddx_thresh
+                # rolling distance over window
+                if len(self.left_hist) >= self.lc_window_size:
+                    xs = [s[1] for s in self.left_hist]
+                    rolling_dist = max(xs) - min(xs)
+                else:
+                    rolling_dist = 0.0
 
+                # gating: both abs(ddx) and rolling distance must exceed thresholds
+                if left_ddx is not None and abs(left_ddx) > self.lc_ddx_threshold and rolling_dist > self.lc_dist_threshold:
+                    left_hit = True
+            else:
+                left_hit = False
+        else:
+            left_hit = False
+
+        # RIGHT (symmetric)
+        if _finite(right_x):
+            self.right_hist.append((t_sec, float(right_x)))
+            right_hit = False
+            if len(self.right_hist) >= 2:
+                t1, x1 = self.right_hist[-2]
+                t2, x2 = self.right_hist[-1]
+                dt_sample = t2 - t1 if (t2 - t1) != 0 else None
+                right_dx = None
+                right_ddx = None
+                if dt_sample is not None and dt_sample > 0:
+                    right_dx = (x2 - x1) / dt_sample
+                    if self.right_last_dx is not None:
+                        right_ddx = (right_dx - self.right_last_dx) / dt_sample
+                    self.right_last_dx = right_dx
+                    right_dx_val = right_dx
+                    right_ddx_val = right_ddx
+
+                if len(self.right_hist) >= self.lc_window_size:
+                    xs = [s[1] for s in self.right_hist]
+                    rolling_dist_r = max(xs) - min(xs)
+                else:
+                    rolling_dist_r = 0.0
+
+                if right_ddx is not None and abs(right_ddx) > self.lc_ddx_threshold and rolling_dist_r > self.lc_dist_threshold:
+                    right_hit = True
+            else:
+                right_hit = False
+        else:
+            right_hit = False
+
+        # Latch completion flags
         if left_hit or right_hit:
             with self.lock:
                 if left_hit:
                     self.left_lane_change_complete = True
+                    try:
+                        self.pub_left_complete.publish(Bool(True))
+                    except Exception:
+                        pass
                 if right_hit:
                     self.right_lane_change_complete = True
+                    try:
+                        self.pub_right_complete.publish(Bool(True))
+                    except Exception:
+                        pass
+
+        # Publish raw dx/ddx for plotting (use invalid_value when not finite)
+        try:
+            self.pub_left_x.publish(Float32(left_x if _finite(left_x) else self.invalid_value))
+            self.pub_right_x.publish(Float32(right_x if _finite(right_x) else self.invalid_value))
+            self.pub_left_dx.publish(Float32(left_dx_val if _finite(left_dx_val) else self.invalid_value))
+            self.pub_left_ddx.publish(Float32(left_ddx_val if _finite(left_ddx_val) else self.invalid_value))
+            self.pub_right_dx.publish(Float32(right_dx_val if _finite(right_dx_val) else self.invalid_value))
+            self.pub_right_ddx.publish(Float32(right_ddx_val if _finite(right_ddx_val) else self.invalid_value))
+        except Exception:
+            pass
 
     # ---------------- keyboard ----------------
     def _log(self, error=False):
@@ -630,6 +693,12 @@ class FinalPlanner:
             self.state_pub.publish(String(self.state))
             self.yolo_crash_pub.publish(Bool(bool(self.yolo_crash)))
             self.reason_pub.publish(String(str(self.lane_change_reason)))
+            # publish lane change completion flags every loop
+            try:
+                self.pub_left_complete.publish(Bool(bool(self.left_lane_change_complete)))
+                self.pub_right_complete.publish(Bool(bool(self.right_lane_change_complete)))
+            except Exception:
+                pass
 
             self.rate.sleep()
 

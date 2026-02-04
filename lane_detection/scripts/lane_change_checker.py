@@ -302,10 +302,10 @@ class LaneChangeChecker:
         self.pub_left_flag.publish(Int16(1 if left_hit else 0))
         self.pub_right_flag.publish(Int16(1 if right_hit else 0))
 
-        if left_hit and not self.left_triggered:
-            rospy.logwarn('lane_change_checker: lane change to left')
-        if right_hit and not self.right_triggered:
-            rospy.logwarn('lane_change_checker: lane change to right')
+        # if left_hit and not self.left_triggered:
+        #     rospy.logwarn('lane_change_checker: lane change to left')
+        # if right_hit and not self.right_triggered:
+        #     rospy.logwarn('lane_change_checker: lane change to right')
 
         self.left_triggered = left_hit
         self.right_triggered = right_hit
