@@ -44,47 +44,8 @@ class FinalPlanner:
         self.rate_hz = rospy.get_param("~rate_hz", 20)
         self.default_motor = rospy.get_param("~default_motor", 0)
 
-        # ---- subs ----
-        rospy.Subscriber("/lane_steer", Int16, self.lane_steer_callback, queue_size=1)
-        rospy.Subscriber("/cur_lane", Int16, self.cur_lane_callback, queue_size=1)
-        rospy.Subscriber("/car_projected", PoseArray, self.car_projected_callback, queue_size=1)
-        rospy.Subscriber("/traffic", Int16, self.traffic_callback, queue_size=1)
-        rospy.Subscriber("/crossline", Int16, self.crossline_callback, queue_size=1)
-        rospy.Subscriber("/rosserial_check", Int16, self.serial_check_callback, queue_size=1)
-        self.lane_lines_topic = rospy.get_param("~lane_lines_topic", DEFAULT_LANE_LINES_TOPIC)
-        rospy.Subscriber(self.lane_lines_topic, Int32MultiArray, self.lane_lines_callback, queue_size=1)
-
-        # ---- pubs (actuation) ----
-        self.motor_cmd_steer_pub = rospy.Publisher("/des_steer", Int16, queue_size=1)
-        self.motor_long_pub = rospy.Publisher("/motor_cmd_long", Int16, queue_size=1)
-
-        # ---- pubs (viz/status) ----
-        # 매 루프 publish (20Hz)로 사용
-        self.state_pub = rospy.Publisher("/final_planner/state", String, queue_size=1)
-        self.yolo_crash_pub = rospy.Publisher("/final_planner/yolo_crash", Bool, queue_size=1)
-        self.reason_pub = rospy.Publisher("/final_planner/lane_change_reason", String, queue_size=1)
-
-        self.yolo_crash_point_pub = rospy.Publisher("/final_planner/yolo_crash_point", PointStamped, queue_size=1)
-        self.last_yolo_true_point = None
-        # ---- lane change debug pubs (plotting) ----
-        # Publishers for raw dx/ddx values (for plotting/debug)
-        self.pub_left_x = rospy.Publisher('lane_change/left/x', Float32, queue_size=10)
-        self.pub_right_x = rospy.Publisher('lane_change/right/x', Float32, queue_size=10)
-        self.pub_left_dx = rospy.Publisher('lane_change/left/dx', Float32, queue_size=10)
-        self.pub_left_ddx = rospy.Publisher('lane_change/left/ddx', Float32, queue_size=10)
-        self.pub_right_dx = rospy.Publisher('lane_change/right/dx', Float32, queue_size=10)
-        self.pub_right_ddx = rospy.Publisher('lane_change/right/ddx', Float32, queue_size=10)
-        # Publishers for lane change completion flags
-        self.pub_left_complete = rospy.Publisher('lane_change/left/complete', Bool, queue_size=10)
-        self.pub_right_complete = rospy.Publisher('lane_change/right/complete', Bool, queue_size=10)
-
-        self.lock = threading.Lock()
-        th = threading.Thread(target=self.keyboard_listener, daemon=True)
-        th.start()
-        self.rate = rospy.Rate(self.rate_hz)
-        self.node_start_time = rospy.Time.now()
-
         # ---- params ----
+        self.lane_lines_topic = rospy.get_param("~lane_lines_topic", DEFAULT_LANE_LINES_TOPIC)
         self.roi_offset_x = rospy.get_param("planner_common/roi/offset_x", 0.74)
 
         # ROI radius (meters)
@@ -139,6 +100,9 @@ class FinalPlanner:
         self.frozen_since = None
         self.last_serial_ready = None
 
+        # ---- sync primitives (must exist before any callbacks fire) ----
+        self.lock = threading.Lock()
+
         # ---- state ----
         self.mode = "DEFAULT"
         self.last_lane_steer = 0
@@ -178,6 +142,7 @@ class FinalPlanner:
         self.serial_ok = False
         self.serial_received = False
         self.serial_last_time = None
+
         # ---- lane change state ----
         self.latest_lines = None
         self.last_lane_timer_time = None
@@ -192,6 +157,44 @@ class FinalPlanner:
         self.right_hist = deque(maxlen=self.lc_window_size)
         self.left_last_dx = None
         self.right_last_dx = None
+
+        # ---- subs ----
+        rospy.Subscriber("/lane_steer", Int16, self.lane_steer_callback, queue_size=1)
+        rospy.Subscriber("/cur_lane", Int16, self.cur_lane_callback, queue_size=1)
+        rospy.Subscriber("/car_projected", PoseArray, self.car_projected_callback, queue_size=1)
+        rospy.Subscriber("/traffic", Int16, self.traffic_callback, queue_size=1)
+        rospy.Subscriber("/crossline", Int16, self.crossline_callback, queue_size=1)
+        rospy.Subscriber("/rosserial_check", Int16, self.serial_check_callback, queue_size=1)
+        rospy.Subscriber(self.lane_lines_topic, Int32MultiArray, self.lane_lines_callback, queue_size=1)
+
+        # ---- pubs (actuation) ----
+        self.motor_cmd_steer_pub = rospy.Publisher("/des_steer", Int16, queue_size=1)
+        self.motor_long_pub = rospy.Publisher("/motor_cmd_long", Int16, queue_size=1)
+
+        # ---- pubs (viz/status) ----
+        # 매 루프 publish (20Hz)로 사용
+        self.state_pub = rospy.Publisher("/final_planner/state", String, queue_size=1)
+        self.yolo_crash_pub = rospy.Publisher("/final_planner/yolo_crash", Bool, queue_size=1)
+        self.reason_pub = rospy.Publisher("/final_planner/lane_change_reason", String, queue_size=1)
+
+        self.yolo_crash_point_pub = rospy.Publisher("/final_planner/yolo_crash_point", PointStamped, queue_size=1)
+        self.last_yolo_true_point = None
+        # ---- lane change debug pubs (plotting) ----
+        # Publishers for raw dx/ddx values (for plotting/debug)
+        self.pub_left_x = rospy.Publisher('lane_change/left/x', Float32, queue_size=10)
+        self.pub_right_x = rospy.Publisher('lane_change/right/x', Float32, queue_size=10)
+        self.pub_left_dx = rospy.Publisher('lane_change/left/dx', Float32, queue_size=10)
+        self.pub_left_ddx = rospy.Publisher('lane_change/left/ddx', Float32, queue_size=10)
+        self.pub_right_dx = rospy.Publisher('lane_change/right/dx', Float32, queue_size=10)
+        self.pub_right_ddx = rospy.Publisher('lane_change/right/ddx', Float32, queue_size=10)
+        # Publishers for lane change completion flags
+        self.pub_left_complete = rospy.Publisher('lane_change/left/complete', Bool, queue_size=10)
+        self.pub_right_complete = rospy.Publisher('lane_change/right/complete', Bool, queue_size=10)
+
+        th = threading.Thread(target=self.keyboard_listener, daemon=True)
+        th.start()
+        self.rate = rospy.Rate(self.rate_hz)
+        self.node_start_time = rospy.Time.now()
 
         period = 1.0 / float(self.rate_hz) if self.rate_hz > 0.0 else 0.05
         rospy.Timer(rospy.Duration(period), self.lane_change_timer_callback)
