@@ -128,22 +128,17 @@ Visualization Manager:
         ids: true
       Queue Size: 100
       Value: true
-    - Class: rviz/Marker
+    - Class: rviz/MarkerArray
       Enabled: true
-      Marker Topic: /parking_destination_marker
-      Name: ParkingDestination
-      Namespaces:
-        {}
+      Marker Topic: /parking_viz
+      Name: ParkingViz
       Queue Size: 100
-      Value: true
-    - Class: rviz/Marker
-      Enabled: true
-      Marker Topic: /stanley_debug
-      Name: StanleyDebug
       Namespaces:
-        {}
-      Queue Size: 100
+        parking_destination: true
+        filtered_points: true
+        filtered_points_line: true
       Value: true
+
     - Align Bottom: false
       Background Alpha: 0.6000000238418579
       Background Color: 0; 0; 0
@@ -193,22 +188,6 @@ Visualization Manager:
       Namespaces:
         roi_fill: true
       Queue Size: 10
-      Value: true
-    - Class: rviz/Marker
-      Enabled: true
-      Marker Topic: /filtered_points_marker
-      Name: FilteredPointsCircles
-      Namespaces:
-        {}
-      Queue Size: 100
-      Value: true
-    - Class: rviz/Marker
-      Enabled: true
-      Marker Topic: /filtered_points_marker
-      Name: FilteredPointsLine
-      Namespaces:
-        {}
-      Queue Size: 100
       Value: true
     - Class: rviz/Marker
       Enabled: true
