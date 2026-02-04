@@ -298,10 +298,10 @@ class Stanley:
         m.type = Marker.LINE_LIST
         m.action = Marker.ADD
 
-        m.scale.x = 0.06
-        m.color.r = 1.0
+        m.scale.x = 0.04
+        m.color.r = 0.7
         m.color.g = 0.2
-        m.color.b = 0.2
+        m.color.b = 0.8
         m.color.a = 1.0
 
         p0 = Point(0.0, 0.0, 0.0)

@@ -2,15 +2,24 @@
 
 import rospy, math
 import numpy as np
-from std_msgs.msg import Int16, ColorRGBA
+from std_msgs.msg import Int16, ColorRGBA, Header
 from geometry_msgs.msg import PoseArray
 from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped, Point
-from visualization_msgs.msg import Marker
+from visualization_msgs.msg import Marker, MarkerArray
 from jsk_rviz_plugins.msg import OverlayText
 from tf.transformations import quaternion_from_euler
 import threading
 
+NS_DEST   = "parking_destination"
+NS_POINTS = "filtered_points"
+NS_LINE   = "filtered_points_line"
+
+ID_DEST_SPHERE = 0
+ID_DEST_TEXT   = 1
+ID_POINT_0     = 0
+ID_POINT_1     = 1
+ID_LINE        = 0
 
 class Parking:
     def __init__(self):
@@ -35,6 +44,7 @@ class Parking:
         # --------------------steer---------------
         self.stanley_steer = 0
         self.lane_steer    = 0
+        self.cur_steer     = 0
         # ========================================
 
 
@@ -45,7 +55,6 @@ class Parking:
         self.can_start_parking   = False
         self.parked              = False
         self.pulled_out          = False
-        self.to_finish           = False
         
         self.first_updated  = False
         self.second_updated = False
@@ -82,6 +91,7 @@ class Parking:
         # -------------------variable-------------
         self.ultrasonics     = [-1, 20000, -1, 20000, 20000, 20000]
         self.start_time      = None
+        self.detection_start = None
         self.first_car       = np.full((1, 2), np.nan)
         self.second_car      = np.full((1, 2), np.nan)
         self.filtered_points = np.vstack([self.first_car, self.second_car])
@@ -111,9 +121,8 @@ class Parking:
         self.motor_cmd_steer_pub = rospy.Publisher("/des_steer", Int16, queue_size=1)
         self.motor_long_pub = rospy.Publisher("/motor_cmd_long", Int16, queue_size=1)
         self.stanley_path_pub = rospy.Publisher("/stanley_path",Path,queue_size=1)
-        self.dest_marker_pub = rospy.Publisher("/parking_destination_marker",Marker,queue_size=1)
-        self.filtered_points_marker_pub = rospy.Publisher("/filtered_points_marker",Marker,queue_size=1)
-        self.roi_marker_pub = rospy.Publisher("/roi_marker",Marker,queue_size=1)
+        self.viz_pub = rospy.Publisher("/parking_viz", MarkerArray, queue_size=10)
+        self.roi_marker_pub = rospy.Publisher("/roi_marker", Marker, queue_size=10)
         self.debug_text_pub = rospy.Publisher("/debug_overlay_text", OverlayText, queue_size=1, latch=True)
         # ====================================================================================================
         
@@ -124,6 +133,7 @@ class Parking:
         # ====================================================================================================
         
     def run(self):
+        
         while not rospy.is_shutdown():
             if not self.serial_ok:
                 rospy.logerr_throttle(0.5, "시리얼 터짐")
@@ -224,6 +234,7 @@ class Parking:
         self.PAUSE_TIME          = rospy.get_param("~timing/pause", 0.5)
         self.PARKING_PAUSE_TIME  = rospy.get_param("~timing/parking_pause", 2.0)
         self.GOING_RIGHT_TIME    = rospy.get_param("~timing/going_right", 2.5)
+        self.DETECTION_TIME      = rospy.get_param("~timing/detection_start", 4)
 
         # ---------------- threshold ----------------
         self.CAN_PARK_TH = rospy.get_param("~threshold/can_park", -2.0)
@@ -304,6 +315,7 @@ class Parking:
                 elif key == "f":
                     if self.mode != "FINAL":
                         self.mode = "FINAL"
+                        self.detection_start = rospy.Time.now()
                         if self.prev_state is not None:
                             self.state = self.prev_state
                             rospy.loginfo(f"-> FINAL (resume state: {self.state})")
@@ -353,8 +365,14 @@ class Parking:
 
     def detection_poses_callback(self, msg):
         
-        if self.frozen:
+        self.publish_debug_text()
+        
+        if self.detection_start == None or self.frozen:
             return
+        else:
+            elapsed = (rospy.Time.now() - self.detection_start).to_sec()
+            if elapsed <= self.DETECTION_TIME:
+                return
         
         points = np.array([[pose.position.x, pose.position.y] for pose in msg.poses],dtype=float)
 
@@ -379,7 +397,11 @@ class Parking:
                 self.filtered_points = np.vstack(
                     [self.first_car, self.second_car]
                 )
+                dest = np.mean(self.filtered_points, axis=0)
+                self.publish_parking_viz(dest, self.filtered_points)
+                
         else:
+            self.clear_parking_viz(self.SP.get("frame_id", "laser"))
             self.both_updated = False
 
 
@@ -391,7 +413,6 @@ class Parking:
 
             self.stanley_path(self.filtered_points)
 
-        self.publish_debug_text()
             
     def detect_first_car(self, point):
         
@@ -614,7 +635,7 @@ class Parking:
             self.steer_source = "STANLEY"
         else:
             self.steer_source = "CONST"
-
+        self.cur_steer = des_steer
         self.motor_cmd_steer_pub.publish(Int16(int(des_steer)))
         self.motor_long_pub.publish(Int16(int(long_cmd)))
     
@@ -648,7 +669,7 @@ class Parking:
             empty_path.header.stamp = rospy.Time.now()
             empty_path.header.frame_id = self.SP.get("frame_id", "laser")
             self.stanley_path_pub.publish(empty_path)
-            self.clear_stanley_markers()
+
             rospy.logwarn_throttle(1.0, "stanley path invalid (not both updated)")
             return
 
@@ -690,158 +711,143 @@ class Parking:
 
         self.stanley_path_pub.publish(path_msg)
         rospy.loginfo_throttle(1.0, "publishing stanley path")
-        self.publish_destination_marker(dest)
-        self.publish_filtered_points_marker(filtered_points)
-        self.publish_filtered_points_line(filtered_points)
+
         
     # ====================================================================================================
     # ------------------------------------------markers---------------------------------------------------
-    def publish_destination_marker(self, dest):
+    # =========================
+    # Marker IDs (고정)
+    # =========================
+
+    def _mk_header(self, frame_id="laser"):
+        h = Header()
+        h.stamp = rospy.Time.now()
+        h.frame_id = frame_id
+        return h
+
+    def _mk_delete(self, ns, mid, frame_id="laser"):
+        m = Marker()
+        m.header = self._mk_header(frame_id)
+        m.ns = ns
+        m.id = mid
+        m.action = Marker.DELETE
+        return m
+
+    def _mk_sphere(self, ns, mid, x, y, z=0.0, scale=0.3, rgba=(1.0, 0.0, 0.0, 1.0), frame_id="laser"):
+        m = Marker()
+        m.header = self._mk_header(frame_id)
+        m.ns = ns
+        m.id = mid
+        m.type = Marker.SPHERE
+        m.action = Marker.ADD
+        m.pose.position.x = float(x)
+        m.pose.position.y = float(y)
+        m.pose.position.z = float(z)
+        m.scale.x = float(scale)
+        m.scale.y = float(scale)
+        m.scale.z = float(scale)
+        m.color = ColorRGBA(*rgba)
+        return m
+
+    def _mk_text(self, ns, mid, x, y, text, z=0.4, text_size=0.15, rgba=(1.0, 1.0, 1.0, 1.0), frame_id="laser"):
+        m = Marker()
+        m.header = self._mk_header(frame_id)
+        m.ns = ns
+        m.id = mid
+        m.type = Marker.TEXT_VIEW_FACING
+        m.action = Marker.ADD
+        m.pose.position.x = float(x)
+        m.pose.position.y = float(y)
+        m.pose.position.z = float(z)
+        m.scale.z = float(text_size)
+        m.color = ColorRGBA(*rgba)
+        m.text = text
+        return m
+
+    def _mk_circle_line_strip(self, ns, mid, cx, cy, radius=0.2, thickness=0.05, rgba=(0.0, 0.4, 1.0, 1.0), frame_id="laser"):
+        m = Marker()
+        m.header = self._mk_header(frame_id)
+        m.ns = ns
+        m.id = mid
+        m.type = Marker.LINE_STRIP
+        m.action = Marker.ADD
+        m.scale.x = float(thickness)
+        m.color = ColorRGBA(*rgba)
+
+        num_segments = 40
+        for k in range(num_segments + 1):
+            theta = 2.0 * math.pi * k / num_segments
+            p = Point()
+            p.x = float(cx + radius * math.cos(theta))
+            p.y = float(cy + radius * math.sin(theta))
+            p.z = 0.0
+            m.points.append(p)
+        return m
+
+    def _mk_line_list(self, ns, mid, p0, p1, thickness=0.06, rgba=(1.0, 1.0, 0.0, 1.0), frame_id="laser"):
+        m = Marker()
+        m.header = self._mk_header(frame_id)
+        m.ns = ns
+        m.id = mid
+        m.type = Marker.LINE_LIST
+        m.action = Marker.ADD
+        m.scale.x = float(thickness)
+        m.color = ColorRGBA(*rgba)
+
+        a = Point(float(p0[0]), float(p0[1]), 0.0)
+        b = Point(float(p1[0]), float(p1[1]), 0.0)
+        m.points = [a, b]
+        return m
+
+    def publish_parking_viz(self, dest, points, frame_id="laser"):
         """
-        dest: np.ndarray (2,)
+        기존 기능 동일:
+        - dest 빨간 구 + 텍스트
+        - points 두 개 파란 원
+        - points 사이 노란 선
+        전부 MarkerArray로 한 번에 publish
         """
-
-        now = rospy.Time.now()
-
-        # ---------------- sphere (destination) ----------------
-        marker = Marker()
-        marker.header.frame_id = "laser"
-        marker.header.stamp = now
-
-        marker.ns = "parking_destination"
-        marker.id = 0
-        marker.type = Marker.SPHERE
-        marker.action = Marker.ADD
-
-        marker.pose.position.x = float(dest[0])
-        marker.pose.position.y = float(dest[1])
-        marker.pose.position.z = 0.0
-
-        marker.scale.x = 0.3
-        marker.scale.y = 0.3
-        marker.scale.z = 0.3
-
-        marker.color.r = 1.0
-        marker.color.g = 0.0
-        marker.color.b = 0.0
-        marker.color.a = 1.0
-
-        self.dest_marker_pub.publish(marker)
-
-        # ---------------- text (local coordinate) ----------------
-        text = Marker()
-        text.header.frame_id = "laser"
-        text.header.stamp = now
-
-        text.ns = "parking_destination"
-        text.id = 1
-        text.type = Marker.TEXT_VIEW_FACING
-        text.action = Marker.ADD
-
-        # 텍스트 위치 (살짝 위)
-        text.pose.position.x = float(dest[0])
-        text.pose.position.y = float(dest[1])
-        text.pose.position.z = 0.4
-
-        text.scale.z = 0.15   # 글자 크기 (작게)
-
-        # 흰색 텍스트
-        text.color.r = 1.0
-        text.color.g = 1.0
-        text.color.b = 1.0
-        text.color.a = 1.0
-
-        text.text = f"({dest[0]:+.2f}, {dest[1]:+.2f})"
-
-        self.dest_marker_pub.publish(text)
-    # 빨간 구(SPHERE): 두 차량(클러스터) 중심의 평균점 dest = “주차 목표점/중앙점”
-    # 흰색 텍스트(TEXT_VIEW_FACING): 그 목표점의 좌표 (x, y)를 글자로 표시
-    
-    def publish_filtered_points_marker(self, points):
-        
-        """
-        points: np.ndarray shape (2, 2)
-        두 점을 각각 속이 빈 원(Line Strip)으로 시각화
-        """
-
-        if points is None or points.shape != (2, 2):
+        if dest is None or np.any(np.isnan(dest)) or points is None or points.shape != (2, 2):
             return
 
-        radius = 0.2        # 원 반지름 (m)
-        num_segments = 40   # 원 해상도
+        arr = MarkerArray()
 
-        for i, (cx, cy) in enumerate(points):
-            marker = Marker()
-            marker.header.frame_id = "laser"
-            marker.header.stamp = rospy.Time.now()
+        # destination
+        arr.markers.append(self._mk_sphere(NS_DEST, ID_DEST_SPHERE, dest[0], dest[1], scale=0.3,
+                                        rgba=(1.0, 0.0, 0.0, 1.0), frame_id=frame_id))
+        arr.markers.append(self._mk_text(NS_DEST, ID_DEST_TEXT, dest[0], dest[1],
+                                        text=f"({dest[0]:+.2f}, {dest[1]:+.2f})",
+                                        text_size=0.15, rgba=(1.0, 1.0, 1.0, 1.0), frame_id=frame_id))
 
-            marker.ns = "filtered_points"
-            marker.id = i
-            marker.type = Marker.LINE_STRIP
-            marker.action = Marker.ADD
+        # filtered points circles (2개)
+        arr.markers.append(self._mk_circle_line_strip(NS_POINTS, ID_POINT_0, points[0,0], points[0,1],
+                                                    radius=0.2, thickness=0.05,
+                                                    rgba=(0.0, 0.4, 1.0, 1.0), frame_id=frame_id))
+        arr.markers.append(self._mk_circle_line_strip(NS_POINTS, ID_POINT_1, points[1,0], points[1,1],
+                                                    radius=0.2, thickness=0.05,
+                                                    rgba=(0.0, 0.4, 1.0, 1.0), frame_id=frame_id))
 
-            marker.scale.x = 0.05   # 선 두께
+        # line connecting two points
+        arr.markers.append(self._mk_line_list(NS_LINE, ID_LINE, points[0], points[1],
+                                            thickness=0.08,  # 너가 말한 "조금 더 굵은 노란 선" 유지(원래 0.06이었는데 이미 너는 더 굵게 원한다고 했음)
+                                            rgba=(1.0, 1.0, 0.0, 1.0), frame_id=frame_id))
 
-            # 색상 (파란색)
-            marker.color.r = 0.0
-            marker.color.g = 0.4
-            marker.color.b = 1.0
-            marker.color.a = 1.0
+        self.viz_pub.publish(arr)
 
-            # 원 껍질 생성
-            for k in range(num_segments + 1):
-                theta = 2.0 * math.pi * k / num_segments
-                p = Point()
-                p.x = cx + radius * math.cos(theta)
-                p.y = cy + radius * math.sin(theta)
-                p.z = 0.0
-                marker.points.append(p)
-
-            self.filtered_points_marker_pub.publish(marker)
-    # 파란 원 테두리 2개(LINE_STRIP): points[0], points[1] 각각(첫 차/둘째 차로 추적 중인 포인트)을 원 형태로 강조 표시
-    
-    def publish_filtered_points_line(self, points):
+    def clear_parking_viz(self, frame_id="laser"):
         """
-        points: np.ndarray shape (2, 2)
-        두 점을 잇는 선분 시각화
+        기존 clear_stanley_markers()와 동일 목적:
+        dest(0,1), points(0,1), line(0) 삭제
+        MarkerArray로 한 번에 DELETE
         """
+        arr = MarkerArray()
+        arr.markers.append(self._mk_delete(NS_DEST, ID_DEST_SPHERE, frame_id))
+        arr.markers.append(self._mk_delete(NS_DEST, ID_DEST_TEXT, frame_id))
+        arr.markers.append(self._mk_delete(NS_POINTS, ID_POINT_0, frame_id))
+        arr.markers.append(self._mk_delete(NS_POINTS, ID_POINT_1, frame_id))
+        arr.markers.append(self._mk_delete(NS_LINE, ID_LINE, frame_id))
+        self.viz_pub.publish(arr)
 
-        if points is None or points.shape != (2, 2):
-            return
-
-        marker = Marker()
-        marker.header.frame_id = "laser"
-        marker.header.stamp = rospy.Time.now()
-
-        marker.ns = "filtered_points_line"
-        marker.id = 0
-        marker.type = Marker.LINE_LIST
-        marker.action = Marker.ADD
-
-        marker.scale.x = 0.06   # 선 두께
-
-        # 색상 (노란색)
-        marker.color.r = 1.0
-        marker.color.g = 1.0
-        marker.color.b = 0.0
-        marker.color.a = 1.0
-
-        p0 = Point()
-        p0.x = float(points[0, 0])
-        p0.y = float(points[0, 1])
-        p0.z = 0.0
-
-        p1 = Point()
-        p1.x = float(points[1, 0])
-        p1.y = float(points[1, 1])
-        p1.z = 0.0
-
-        marker.points.append(p0)
-        marker.points.append(p1)
-
-        self.filtered_points_marker_pub.publish(marker)
-    # 노란 선(LINE_LIST): points[0] ↔ points[1] 를 잇는 선분 = 두 차량 사이 방향/간격을 시각화 (이 벡터로 법선 잡아서 stanley path 만들지)
-        
     def publish_lane_roi_filled(self):
         cfg = self.ROI_LANE  # YAML에서 로드된 dict: x_min/x_max/y_min/y_max
 
@@ -953,29 +959,6 @@ class Parking:
         
     # 파란 반투명 부채꼴 도넛(TRIANGLE_LIST): full_left_steer 상태에서 first_car를 중심으로 하는 ROI (r_min~r_max + ±angle) = “두 번째 차를 찾는 검색 구역”
 
-    def clear_stanley_markers(self):
-        now = rospy.Time.now()
-
-        def delete_marker(ns, mid):
-            m = Marker()
-            m.header.frame_id = "laser"
-            m.header.stamp = now
-            m.ns = ns
-            m.id = mid
-            m.action = Marker.DELETE
-            return m
-
-        # destination
-        self.dest_marker_pub.publish(delete_marker("parking_destination", 0))
-        self.dest_marker_pub.publish(delete_marker("parking_destination", 1))
-
-        # filtered points (2개)
-        self.filtered_points_marker_pub.publish(delete_marker("filtered_points", 0))
-        self.filtered_points_marker_pub.publish(delete_marker("filtered_points", 1))
-
-        # line
-        self.filtered_points_marker_pub.publish(delete_marker("filtered_points_line", 0))
-    
     def clear_roi_markers(self):
         now = rospy.Time.now()
 
@@ -1013,7 +996,7 @@ class Parking:
             f"SECOND CAR\n"
             f"   detected : {self.second_car_detected}\n"
             f"   pos      : {fmt(self.second_car.reshape(2))}\n\n"
-            f"STEER SOURCE   : {self.steer_source}\n"
+            f"STEER SOURCE   : {self.steer_source}, steer: {self.cur_steer}\n"
             f"CUR STANLEY TH (up to > {self.CAN_PARK_TH}): {self.can_park_TH}\n\n"
             f"SONICS\n"
             f"left front   : {self.ultrasonics[1]}\n"
