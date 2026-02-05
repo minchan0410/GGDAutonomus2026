@@ -102,6 +102,9 @@ class FinalPlanner:
 
         # ---- sync primitives (must exist before any callbacks fire) ----
         self.lock = threading.Lock()
+        # record node start time early so callbacks that run during init
+        # can safely consult `_startup_blocked()` without AttributeError
+        self.node_start_time = rospy.Time.now()
 
         # ---- state ----
         self.mode = "DEFAULT"
@@ -194,7 +197,6 @@ class FinalPlanner:
         th = threading.Thread(target=self.keyboard_listener, daemon=True)
         th.start()
         self.rate = rospy.Rate(self.rate_hz)
-        self.node_start_time = rospy.Time.now()
 
         period = 1.0 / float(self.rate_hz) if self.rate_hz > 0.0 else 0.05
         rospy.Timer(rospy.Duration(period), self.lane_change_timer_callback)

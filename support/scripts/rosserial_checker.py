@@ -13,19 +13,6 @@ class Rosserial_checker:
         self.start_time_pot = time.time()
         rospy.Subscriber("/potentiometer", Int16, self.cb_pot)
 
-        # --- ultrasonic 1~5 ---
-        self.ultra_topics = {
-            "/ultrasonic1": {"last_time": None, "count": 0, "start": time.time()},
-            "/ultrasonic2": {"last_time": None, "count": 0, "start": time.time()},
-            "/ultrasonic3": {"last_time": None, "count": 0, "start": time.time()},
-            "/ultrasonic4": {"last_time": None, "count": 0, "start": time.time()},
-            "/ultrasonic5": {"last_time": None, "count": 0, "start": time.time()},
-        }
-
-        # 각 토픽별 subscriber 등록
-        for topic in self.ultra_topics.keys():
-            rospy.Subscriber(topic, Int16, self.cb_ultra, callback_args=topic)
-
         # --- heartbeat ---
         self.heartbeat_pub = rospy.Publisher("/heart_beat", Int16, queue_size=1)
         self.heartbeat_msg = Int16()
@@ -50,20 +37,6 @@ class Rosserial_checker:
         # 개별 로그는 끔 (전체 상태 로그만 보기 위해)
         # rospy.loginfo_throttle(0.5, f"[POT] dt: {dt:.4f}s")
 
-    # ultrasonic callback
-    def cb_ultra(self, msg, topic):
-        now = time.time()
-        state = self.ultra_topics[topic]
-        if state["last_time"] is None:
-            state["last_time"] = now
-            return
-
-        # dt = now - state["last_time"]
-        state["last_time"] = now
-        state["count"] += 1
-
-        # 개별 로그는 끔
-        # rospy.loginfo_throttle(0.5, f"[ULTRA {topic}] dt: {dt:.4f}s")
 
     def monitor_loop(self):
         # 감시 주기는 10Hz~20Hz면 충분합니다 (50Hz는 단순 감시용으로 좀 빠름)
@@ -85,12 +58,6 @@ class Rosserial_checker:
             if self.last_time_pot is not None:
                 if (now - self.last_time_pot) <= self.timeout:
                     all_dead = False
-
-            # ultrasonic 체크
-            for state in self.ultra_topics.values():
-                if state["last_time"] is not None:
-                    if (now - state["last_time"]) <= self.timeout:
-                        all_dead = False
 
             # 결과에 따른 로그 출력 (1초마다 출력)
             if all_dead:
