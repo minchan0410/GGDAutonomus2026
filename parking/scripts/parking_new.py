@@ -86,6 +86,9 @@ class Parking:
         self.SERIAL_BAD_TICKS      = 4
         # ========================================
         
+        #TODO
+        self.herror = 0
+        self.stop_flag = False
         
         # ========================================
         # -------------------variable-------------
@@ -116,6 +119,7 @@ class Parking:
         rospy.Subscriber("/parking_lane_steer", Int16, self.lane_steer_callback, queue_size=1)
         rospy.Subscriber("/parking_stanley_steer", Int16, self.stanley_steer_callback, queue_size=1)
         rospy.Subscriber("/rosserial_check", Int16, self.rosserial_check_callback, queue_size=1)
+        rospy.Subscriber("/herror", Int16, self.herror_callback, queue_size=1)
         
         
         self.motor_cmd_steer_pub = rospy.Publisher("/des_steer", Int16, queue_size=1)
@@ -196,29 +200,34 @@ class Parking:
                     elapsed = (rospy.Time.now() - self.start_time).to_sec()
                     self.drive(0, 0)
                     if elapsed >= self.PARKING_PAUSE_TIME:
-                        self.start_time = None
-                        self.state = "pull_out"
+                        self.start_time = rospy.Time.now()
+                        self.state = "pull_out1"
                         continue
-                    
-                if self.state == "pull_out":
-                    rospy.loginfo_throttle(0.5, f"pulled out: {self.pulled_out}")
-                    if not self.pulled_out:
-                        self.drive(0.0, self.FORWARD_SPEED)
-                        self.sonic_check()
-                    else:
-                        if self.start_time is None:
-                            self.start_time = rospy.Time.now()
+                
+                if self.state == "pull_out1":
+                    elapsed = (rospy.Time.now() - self.start_time).to_sec()
+                    self.drive(0, self.FORWARD_SPEED)
+                    if elapsed >= self.PULLOUT_TIME:
+                        self.start_time = None
+                        self.state = "pull_out2"
+                        continue
 
-                        elapsed = (rospy.Time.now() - self.start_time).to_sec()
-                        if elapsed < self.GOING_RIGHT_TIME:
-                            self.drive(self.FULL_RIGHT_STEER, 225) # TODO
-                        else:
-                            self.start_time = None
-                            self.state = "finishing"
-                            continue
+                    
+                if self.state == "pull_out2":
+                    rospy.loginfo_throttle(0.5, f"pulled out: {self.pulled_out}")
+                    if self.start_time is None:
+                        self.start_time = rospy.Time.now()
+
+                    elapsed = (rospy.Time.now() - self.start_time).to_sec()
+                    if elapsed < self.GOING_RIGHT_TIME:
+                        self.drive(self.FULL_RIGHT_STEER, 225) # TODO
+                    else:
+                        self.start_time = None
+                        self.state = "finishing"
+                        continue
                         
                 if self.state == "finishing":
-                    self.drive(self.lane_steer, 225)
+                    self.drive(0, 225)
 
 
             self.rate.sleep()
@@ -233,6 +242,7 @@ class Parking:
         # ---------------- timing ----------------
         self.PAUSE_TIME          = rospy.get_param("~timing/pause", 0.5)
         self.PARKING_PAUSE_TIME  = rospy.get_param("~timing/parking_pause", 2.0)
+        self.PULLOUT_TIME        = rospy.get_param("~timing/pull_out", 1)
         self.GOING_RIGHT_TIME    = rospy.get_param("~timing/going_right", 2.5)
         self.DETECTION_TIME      = rospy.get_param("~timing/detection_start", 4)
 
@@ -335,7 +345,12 @@ class Parking:
     def lane_steer_callback(self, msg): self.lane_steer = msg.data
     
     def stanley_steer_callback(self, msg): self.stanley_steer = msg.data
-        
+    
+    def herror_callback(self,msg):
+        self.herror = msg.data
+        if abs(self.herror) > 150:
+            self.stop_flag = True
+
     def ultrasonic1_callback(self, msg):
         if msg.data == -1:
             self.ultrasonics[1] = 50000
@@ -646,7 +661,7 @@ class Parking:
 
         if self.state == "stanley":
             
-            if all(x < self.ULTRASONIC_THRESHOLD for x in sonics_to_use1):
+            if all(x < self.ULTRASONIC_THRESHOLD for x in sonics_to_use1) or self.stop_flag:
                 self.parked_streak += 1
                 if self.parked_streak >= 10:
                     self.parked = True
@@ -1009,7 +1024,7 @@ class Parking:
             f"second_car: {self.second_car_streak}\n"
             f"first_lost: {self.lost_first_streak}\n"
             f"second_lost: {self.lost_second_streak}\n"
-            f"parked: {self.parked_streak}\n"
+            f"parked: {self.parked_streak}, stop flag: {self.stop_flag}, herror: {self.herror}\n"
             f"pulled: {self.pulled_streak}\n\n"
             f"rosserial   : {serial_text}\n"
         )
