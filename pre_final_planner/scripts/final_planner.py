@@ -102,9 +102,6 @@ class FinalPlanner:
 
         # ---- sync primitives (must exist before any callbacks fire) ----
         self.lock = threading.Lock()
-        # record node start time early so callbacks that run during init
-        # can safely consult `_startup_blocked()` without AttributeError
-        self.node_start_time = rospy.Time.now()
 
         # ---- state ----
         self.mode = "DEFAULT"
@@ -197,6 +194,7 @@ class FinalPlanner:
         th = threading.Thread(target=self.keyboard_listener, daemon=True)
         th.start()
         self.rate = rospy.Rate(self.rate_hz)
+        self.node_start_time = rospy.Time.now()
 
         period = 1.0 / float(self.rate_hz) if self.rate_hz > 0.0 else 0.05
         rospy.Timer(rospy.Duration(period), self.lane_change_timer_callback)
@@ -636,7 +634,6 @@ class FinalPlanner:
                             self.lc_complete_time = None
 
                 elif self.state == "lane_driving2":
-                    print(list(self.yolo_queue))
                     # STEP 2: 차선 인식 주행 (유지 시간 동안 주행을 계속하고, 만료되면 다음 상태로 전환)
                     self.drive(lane_steer, self.SPEED_HIGH)
                     with self.lock:
@@ -729,3 +726,29 @@ if __name__ == "__main__":
 #   File "/home/vic/kkdws/src/pre_final_planner/scripts/final_planner.py", line 508, in _startup_blocked
 #     return (rospy.Time.now() - self.node_start_time).to_sec() < self.state_change_delay_sec
 # AttributeError: 'FinalPlanner' object has no attribute 'node_start_time'
+
+
+# [INFO] [1770255305.879154]: [FINAL_PLANNER] | SERIAL OK | State = lane_change_to_right
+# [INFO] [1770255307.529267]: [FINAL_PLANNER] | SERIAL OK | State = crossline
+# [INFO] [1770255315.478986]: [FINAL_PLANNER] | SERIAL OK | State = traffic
+# ^C[rviz-5] killing on exit
+# [lane_bev_rviz-4] killing on exit
+# [final_planner_rviz-3] killing on exit
+# [final_planner-2] killing on exit
+# [robot_state_publisher-1] killing on exit
+# Exception in thread Thread-4:
+# Traceback (most recent call last):
+#   File "/usr/lib/python3.8/threading.py", line 932, in _bootstrap_inner
+#     self.run()
+#   File "/opt/ros/noetic/lib/python3/dist-packages/rospy/timer.py", line 240, in run
+#     self._callback(TimerEvent(last_expected, last_real, current_expected, current_real, last_duration))
+#   File "/home/vic/kkdws/src/pre_final_planner/scripts/final_planner_rviz.py", line 382, in on_timer
+#     self.marker_pub.publish(arr)
+#   File "/opt/ros/noetic/lib/python3/dist-packages/rospy/topics.py", line 882, in publish
+#     self.impl.publish(data)
+#   File "/opt/ros/noetic/lib/python3/dist-packages/rospy/topics.py", line 1041, in publish
+#     raise ROSException("publish() to a closed topic")
+# rospy.exceptions.ROSException: publish() to a closed topic
+# shutting down processing monitor...
+# ... shutting down processing monitor complete
+# done
