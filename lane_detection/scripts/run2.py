@@ -304,9 +304,12 @@ class LaneDetector:
         if right_lines:
             for lx1, ly1, lx2, ly2 in right_lines:
                 cv2.line(mask_bgr, (lx1, ly1), (lx2, ly2), (100, 0, 0), 1)
-        
-        left_lines = filter_innermost_lines(left_lines, 'left')
-        right_lines = filter_innermost_lines(right_lines, 'right')
+
+        if is_detected_now == 1:
+            pass
+        else:
+            left_lines = filter_innermost_lines(left_lines, 'left')
+            right_lines = filter_innermost_lines(right_lines, 'right')
 
         left_result = average_lines_projected(left_lines)
         right_result = average_lines_projected(right_lines)

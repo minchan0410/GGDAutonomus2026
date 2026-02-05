@@ -716,3 +716,14 @@ if __name__ == "__main__":
         FinalPlanner()
     except rospy.ROSInterruptException:
         pass
+
+
+# [ERROR] [1770254058.165328]: bad callback: <bound method FinalPlanner.car_projected_callback of <__main__.FinalPlanner object at 0x7f6cd66570d0>>
+# Traceback (most recent call last):
+#   File "/opt/ros/noetic/lib/python3/dist-packages/rospy/topics.py", line 750, in _invoke_callback
+#     cb(msg)
+#   File "/home/vic/kkdws/src/pre_final_planner/scripts/final_planner.py", line 208, in car_projected_callback
+#     if self._startup_blocked():
+#   File "/home/vic/kkdws/src/pre_final_planner/scripts/final_planner.py", line 508, in _startup_blocked
+#     return (rospy.Time.now() - self.node_start_time).to_sec() < self.state_change_delay_sec
+# AttributeError: 'FinalPlanner' object has no attribute 'node_start_time'

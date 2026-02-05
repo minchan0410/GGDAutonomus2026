@@ -1,14 +1,15 @@
 vehicle:
   full_left_steer: 18
   full_right_steer: -22.5
-  forward_speed: 150
+  forward_speed: 175
   backward_speed: -100
 
 timing:
   pause: 0.5
   parking_pause: 2.5
-  going_right: 5
-  detection_start: 4
+  going_right: 4
+  detection_start: 2
+  pull_out: 1
 
 threshold:
   can_park: -2.5

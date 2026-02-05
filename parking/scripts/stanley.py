@@ -22,7 +22,7 @@ class Stanley:
         self.steer_pub = rospy.Publisher("/parking_stanley_steer", Int16, queue_size=1)
         self.marker_pub = rospy.Publisher("/stanley_debug", Marker, queue_size=10)
         self.debug_text_pub = rospy.Publisher("/stanley_debug_text",OverlayText,queue_size=1,latch=True)
-        
+        self.herr_pub = rospy.Publisher("/herror",Int16,queue_size=1)
         self.path = None
         
         
@@ -137,6 +137,9 @@ class Stanley:
         
         self.last_lateral_error = lateral_error
         self.last_heading_error = heading_error
+        heror_msg = Int16()
+        heror_msg.data = int(math.degrees(self.last_heading_error))
+        self.herr_pub.publish(heror_msg)
         self.last_motion_yaw = motion_yaw
         self.last_path_yaw = self.path_yaw
         self.last_steer = steer
