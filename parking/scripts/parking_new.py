@@ -92,7 +92,7 @@ class Parking:
         
         # ========================================
         # -------------------variable-------------
-        self.ultrasonics     = [-1, 20000, -1, 20000, 20000, 20000]
+        # self.ultrasonics     = [-1, 20000, -1, 20000, 20000, 20000]
         self.start_time      = None
         self.detection_start = None
         self.first_car       = np.full((1, 2), np.nan)
@@ -111,10 +111,10 @@ class Parking:
         
         # ====================================================================================================
         # ------------------------------------------ PUB & SUB -----------------------------------------------
-        rospy.Subscriber("/ultrasonic1", Int16, self.ultrasonic1_callback, queue_size=1)
-        rospy.Subscriber("/ultrasonic3", Int16, self.ultrasonic3_callback, queue_size=1)
-        rospy.Subscriber("/ultrasonic4", Int16, self.ultrasonic4_callback, queue_size=1)
-        rospy.Subscriber("/ultrasonic5", Int16, self.ultrasonic5_callback, queue_size=1)
+        # rospy.Subscriber("/ultrasonic1", Int16, self.ultrasonic1_callback, queue_size=1)
+        # rospy.Subscriber("/ultrasonic3", Int16, self.ultrasonic3_callback, queue_size=1)
+        # rospy.Subscriber("/ultrasonic4", Int16, self.ultrasonic4_callback, queue_size=1)
+        # rospy.Subscriber("/ultrasonic5", Int16, self.ultrasonic5_callback, queue_size=1)
         rospy.Subscriber("/detection_poses",PoseArray,self.detection_poses_callback,queue_size=1)
         rospy.Subscriber("/parking_lane_steer", Int16, self.lane_steer_callback, queue_size=1)
         rospy.Subscriber("/parking_stanley_steer", Int16, self.stanley_steer_callback, queue_size=1)
@@ -190,7 +190,7 @@ class Parking:
                 if self.state == "stanley":                 # 후진해서 주차하는 단계
                     if not self.parked:
                         self.drive(self.stanley_steer, self.BACKWARD_SPEED)
-                        self.sonic_check()
+                        self.check()
                     else:
                         self.state = "stop"
                         self.start_time = rospy.Time.now()
@@ -351,32 +351,32 @@ class Parking:
         if abs(self.herror) > 150:
             self.stop_flag = True
 
-    def ultrasonic1_callback(self, msg):
-        if msg.data == -1:
-            self.ultrasonics[1] = 50000
-        else:
-            self.ultrasonics[1] = msg.data
+    # def ultrasonic1_callback(self, msg):
+    #     if msg.data == -1:
+    #         self.ultrasonics[1] = 50000
+    #     else:
+    #         self.ultrasonics[1] = msg.data
 
-    def ultrasonic3_callback(self, msg):
+    # def ultrasonic3_callback(self, msg):
         
-        if msg.data == -1:
-            self.ultrasonics[3] = 50000
-        else:
-            self.ultrasonics[3] = msg.data
+    #     if msg.data == -1:
+    #         self.ultrasonics[3] = 50000
+    #     else:
+    #         self.ultrasonics[3] = msg.data
     
-    def ultrasonic4_callback(self, msg):
+    # def ultrasonic4_callback(self, msg):
         
-        if msg.data == -1:
-            self.ultrasonics[4] = 50000
-        else:
-            self.ultrasonics[4] = msg.data
+    #     if msg.data == -1:
+    #         self.ultrasonics[4] = 50000
+    #     else:
+    #         self.ultrasonics[4] = msg.data
     
-    def ultrasonic5_callback(self, msg):
+    # def ultrasonic5_callback(self, msg):
         
-        if msg.data == -1:
-            self.ultrasonics[5] = 50000
-        else:
-            self.ultrasonics[5] = msg.data
+    #     if msg.data == -1:
+    #         self.ultrasonics[5] = 50000
+    #     else:
+    #         self.ultrasonics[5] = msg.data
 
     def detection_poses_callback(self, msg):
         
@@ -654,28 +654,29 @@ class Parking:
         self.motor_cmd_steer_pub.publish(Int16(int(des_steer)))
         self.motor_long_pub.publish(Int16(int(long_cmd)))
     
-    def sonic_check(self):
+    def check(self):
 
-        sonics_to_use1 = [self.ultrasonics[1], self.ultrasonics[3], self.ultrasonics[4], self.ultrasonics[5]]
-        sonics_to_use2 = [self.ultrasonics[1], self.ultrasonics[3]]
+        # sonics_to_use1 = [self.ultrasonics[1], self.ultrasonics[3], self.ultrasonics[4], self.ultrasonics[5]]
+        # sonics_to_use2 = [self.ultrasonics[1], self.ultrasonics[3]]
 
         if self.state == "stanley":
             
-            if all(x < self.ULTRASONIC_THRESHOLD for x in sonics_to_use1) or self.stop_flag:
+            # if all(x < self.ULTRASONIC_THRESHOLD for x in sonics_to_use1) or self.stop_flag:
+            if self.stop_flag:
                 self.parked_streak += 1
                 if self.parked_streak >= 10:
                     self.parked = True
             else:
                 self.parked_streak = max(0, self.parked_streak - 1)
                 
-        elif self.state == "pull_out":
+        # elif self.state == "pull_out":
             
-            if all(x > self.ULTRASONIC_THRESHOLD for x in sonics_to_use2):
-                self.pulled_streak += 1
-                if self.pulled_streak >= 5:
-                    self.pulled_out = True
-            else:
-                self.pulled_streak = max(0, self.pulled_streak - 1)
+        #     if all(x > self.ULTRASONIC_THRESHOLD for x in sonics_to_use2):
+        #         self.pulled_streak += 1
+        #         if self.pulled_streak >= 5:
+        #             self.pulled_out = True
+        #     else:
+        #         self.pulled_streak = max(0, self.pulled_streak - 1)
                 
     def stanley_path(self, filtered_points):
         
@@ -1013,19 +1014,19 @@ class Parking:
             f"   pos      : {fmt(self.second_car.reshape(2))}\n\n"
             f"STEER SOURCE   : {self.steer_source}, steer: {self.cur_steer}\n"
             f"CUR STANLEY TH (up to > {self.CAN_PARK_TH}): {self.can_park_TH}\n\n"
-            f"SONICS\n"
-            f"left front   : {self.ultrasonics[1]}\n"
-            f"right front   : {self.ultrasonics[3]}\n"
-            f"left rear   : {self.ultrasonics[4]}\n"
-            f"right rear   : {self.ultrasonics[5]}\n"
-            f"threshold   : {self.ULTRASONIC_THRESHOLD}\n\n"
+            # f"SONICS\n"
+            # f"left front   : {self.ultrasonics[1]}\n"
+            # f"right front   : {self.ultrasonics[3]}\n"
+            # f"left rear   : {self.ultrasonics[4]}\n"
+            # f"right rear   : {self.ultrasonics[5]}\n"
+            # f"threshold   : {self.ULTRASONIC_THRESHOLD}\n\n"
             f"STREAK\n"
             f"first_car: {self.first_car_streak}\n"
             f"second_car: {self.second_car_streak}\n"
             f"first_lost: {self.lost_first_streak}\n"
             f"second_lost: {self.lost_second_streak}\n"
-            f"parked: {self.parked_streak}, stop flag: {self.stop_flag}, herror: {self.herror}\n"
-            f"pulled: {self.pulled_streak}\n\n"
+            f"parked: {self.parked_streak}, stop flag: {self.stop_flag}, herror: {self.herror}\n\n"
+            # f"pulled: {self.pulled_streak}\n\n"
             f"rosserial   : {serial_text}\n"
         )
         msg = OverlayText()

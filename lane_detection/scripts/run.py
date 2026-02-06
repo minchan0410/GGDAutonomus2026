@@ -275,15 +275,15 @@ class LaneDetector:
         else:
              display_img = combined_result
 
-        # cv2.imshow("Lane Detection Result", display_img)
+        cv2.imshow("Lane Detection Result", display_img)
         
-        # key = cv2.waitKey(1) & 0xFF
-        # if key == ord('q'):
-        #     rospy.signal_shutdown("User pressed q")
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('q'):
+            rospy.signal_shutdown("User pressed q")
 
     def run(self):
         rospy.spin()
-
+    
 if __name__ == "__main__":
     try:
         lane_detector = LaneDetector()

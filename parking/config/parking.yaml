@@ -6,8 +6,8 @@ vehicle:
 
 timing:
   pause: 0.5
-  parking_pause: 2.5
-  going_right: 4
+  parking_pause: 3
+  going_right: 4.6
   detection_start: 2
   pull_out: 1
 

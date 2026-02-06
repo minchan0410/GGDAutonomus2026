@@ -3,8 +3,8 @@
 import rospy
 from std_msgs.msg import Float32, Int16
 
-POT_LEFT_MAX =              577
-POT_RIGHT_MAX =             426  # potentiometer
+POT_LEFT_MAX =              588
+POT_RIGHT_MAX =             431  # potentiometer
 POT_TOTAL_RANGE_DEGREE =    270
 POT_CENTER = (POT_LEFT_MAX + POT_RIGHT_MAX) / 2.0
 
