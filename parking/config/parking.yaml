@@ -1,5 +1,5 @@
 vehicle:
-  full_left_steer: 18
+  full_left_steer: 15
   full_right_steer: -22.5
   forward_speed: 175
   backward_speed: -100
@@ -12,7 +12,7 @@ timing:
   pull_out: 1
 
 threshold:
-  can_park: -2.5
+  can_park: -3
   ultrasonic: 1000
   track_max_dist: 1.0
 

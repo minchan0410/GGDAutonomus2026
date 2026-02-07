@@ -8,7 +8,7 @@ state_topic: "/traffic"
 weights: "/home/vic/kkdws/src/object_detector/model/traffic26.pt"
 
 # ---- inference params ----
-conf_th: 0.5
+conf_th: 0.35
 
 # class id
 class_id_green: 0

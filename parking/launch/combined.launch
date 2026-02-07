@@ -3,14 +3,14 @@
   <param name="/use_sim_time" value="false" />
 
   <!-- RPLIDAR-->
-  <node name="rplidarNode" pkg="rplidar_ros" type="rplidarNode" output="screen">
+  <!-- <node name="rplidarNode" pkg="rplidar_ros" type="rplidarNode" output="screen">
     <param name="serial_port"      value="/dev/ttyUSB0"/>
     <param name="serial_baudrate"  value="115200"/>
     <param name="frame_id"         value="laser"/>
     <param name="inverted"         value="false"/>
     <param name="angle_compensate" value="true"/>
   </node>
-  
+   -->
 
     <!-- laser_detection -->
     <node name="detection" pkg="laser_detection" type="detection" output="screen">

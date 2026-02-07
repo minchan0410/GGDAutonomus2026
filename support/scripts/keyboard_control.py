@@ -7,7 +7,7 @@ from pynput import keyboard
 import threading
 
 # === 설정값 (튜닝 파라미터) ===
-MAX_SPEED = 100           # 최대 속도 값
+MAX_SPEED = 255           # 최대 속도 값
 MAX_STEER = 30            # 최대 조향 값
 
 # 가속/조향 증가량 (키 누를 때)

@@ -664,7 +664,7 @@ class Parking:
             # if all(x < self.ULTRASONIC_THRESHOLD for x in sonics_to_use1) or self.stop_flag:
             if self.stop_flag:
                 self.parked_streak += 1
-                if self.parked_streak >= 10:
+                if self.parked_streak >= 1:
                     self.parked = True
             else:
                 self.parked_streak = max(0, self.parked_streak - 1)

@@ -132,9 +132,9 @@ class LaneDetector:
         # ---------------------------------------------------------
         gray = cv2.cvtColor(processing_img, cv2.COLOR_BGR2GRAY)
         blur = cv2.GaussianBlur(gray, (3, 3), 5)
-        edges = cv2.Canny(blur, 20, 50)
+        edges = cv2.Canny(blur, 30, 100)
         
-        _, mask = cv2.threshold(gray, 1, 255, cv2.THRESH_BINARY)
+        _, mask = cv2.threshold(gray, 10, 255, cv2.THRESH_BINARY)
         mask = cv2.erode(mask, np.ones((5, 5), np.uint8), iterations=1)
         edges = cv2.bitwise_and(edges, edges, mask=mask)
         edges = cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=3)
