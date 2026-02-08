@@ -134,55 +134,95 @@ public:
     // Min-Max Center + Radius Correction
     Box fittingCircle(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cluster) {
         Box circle_box;
-        pcl::PointXYZ min_pt, max_pt;
-        pcl::getMinMax3D(*cluster, min_pt, max_pt);
+        
+        // 점이 극히 적으면 단순 평균값 반환
+        if (cluster->size() < 3) {
+            pcl::PointXYZ min_pt, max_pt;
+            pcl::getMinMax3D(*cluster, min_pt, max_pt);
+            circle_box.center_x = (min_pt.x + max_pt.x) / 2.0;
+            circle_box.center_y = (min_pt.y + max_pt.y) / 2.0;
+            circle_box.width = (use_fixed_size_) ? fixed_width_ : 0.2;
+            circle_box.length = (use_fixed_size_) ? fixed_width_ : 0.2; // Circle has same width/length
+            circle_box.z_min = min_pt.z;
+            circle_box.z_max = max_pt.z;
+            circle_box.heading = 0.0;
+            return circle_box;
+        }
 
-        double box_cx = (min_pt.x + max_pt.x) / 2.0;
-        double box_cy = (min_pt.y + max_pt.y) / 2.0;
+        // 1. 클러스터의 무게 중심(Centroid) 계산
+        Eigen::Vector2d centroid(0.0, 0.0);
+        double min_z = std::numeric_limits<double>::max();
+        double max_z = -std::numeric_limits<double>::max();
 
-        circle_box.z_min = min_pt.z;
-        circle_box.z_max = max_pt.z;
-        circle_box.heading = 0.0;
+        for (const auto& p : cluster->points) {
+            centroid[0] += p.x;
+            centroid[1] += p.y;
+            if (p.z < min_z) min_z = p.z;
+            if (p.z > max_z) max_z = p.z;
+        }
+        centroid /= static_cast<double>(cluster->size());
+
+        // 2. 센서(0,0)에서 무게중심으로 향하는 방향 벡터 (Viewing Vector)
+        double norm = centroid.norm();
+        Eigen::Vector2d view_dir = (norm > 1e-6) ? (centroid / norm) : Eigen::Vector2d(1.0, 0.0);
+
+        double final_cx, final_cy, final_diam;
 
         if (use_fixed_size_) {
-            circle_box.width = fixed_width_; // Use fixed diameter
-            circle_box.length = fixed_width_;
+            // =========================================================
+            //  High-Performance Surface Anchoring (고정 크기 최적화)
+            // =========================================================
+            double fixed_radius = fixed_width_ / 2.0;
 
-            double obs_diam_x = max_pt.x - min_pt.x;
-            double obs_diam_y = max_pt.y - min_pt.y;
-            double obs_diameter = std::max(obs_diam_x, obs_diam_y); 
-            double diff = (fixed_width_ - obs_diameter) / 2.0;
-            
-            if (diff > 0) {
-                double dist_to_sensor = std::sqrt(box_cx * box_cx + box_cy * box_cy);
-                if (dist_to_sensor > 0.001) {
-                    double ux = box_cx / dist_to_sensor;
-                    double uy = box_cy / dist_to_sensor;
-                    circle_box.center_x = box_cx + ux * diff;
-                    circle_box.center_y = box_cy + uy * diff;
-                } else {
-                    circle_box.center_x = box_cx;
-                    circle_box.center_y = box_cy;
-                }
-            } else {
-                circle_box.center_x = box_cx;
-                circle_box.center_y = box_cy;
+            // 3. 모든 점을 View Vector 위로 투영하여 '깊이(Depth)' 추출
+            std::vector<double> depths;
+            depths.reserve(cluster->size());
+            for (const auto& p : cluster->points) {
+                // 내적(Dot Product)을 통해 방향 벡터 상의 거리 계산
+                double d = p.x * view_dir[0] + p.y * view_dir[1];
+                depths.push_back(d);
             }
+
+            // 4. Robust Surface Detection (하위 10% 지점을 표면으로 간주)
+            // 단순히 min_element를 쓰면 노이즈(튀는 점)에 취약하므로 정렬 후 n번째 값을 씀
+            std::sort(depths.begin(), depths.end());
+            size_t surface_idx = static_cast<size_t>(depths.size() * 0.1); 
+            double surface_dist = depths[surface_idx];
+
+            // 5. 원의 앞면이 표면(surface_dist)에 닿도록 중심 배치
+            // 중심 거리 = 표면 거리 + 반지름
+            double center_dist = surface_dist + fixed_radius;
+            
+            Eigen::Vector2d center_pos = view_dir * center_dist;
+            
+            final_cx = center_pos[0];
+            final_cy = center_pos[1];
+            final_diam = fixed_width_;
+
         } else {
-            // Variable size
-            circle_box.center_x = box_cx;
-            circle_box.center_y = box_cy;
+            // 가변 크기: 기존 방식 혹은 Kasa Method (생략 가능하나 호환성을 위해 단순 Centroid 유지)
+            // 만약 가변 크기에서도 "접하게" 하려면 Kasa Fit을 쓰는 것이 좋습니다.
+            // 여기서는 단순하게 중심과 가장 먼 점을 반지름으로 잡습니다.
             double max_dist_sq = 0.0;
             for (const auto& p : cluster->points) {
-                double dx = p.x - box_cx;
-                double dy = p.y - box_cy;
-                double dist_sq = dx*dx + dy*dy;
-                if (dist_sq > max_dist_sq) max_dist_sq = dist_sq;
+                double dx = p.x - centroid[0];
+                double dy = p.y - centroid[1];
+                double d_sq = dx*dx + dy*dy;
+                if(d_sq > max_dist_sq) max_dist_sq = d_sq;
             }
-            double radius = std::sqrt(max_dist_sq);
-            circle_box.width = radius * 2.0; 
-            circle_box.length = radius * 2.0; 
+            final_cx = centroid[0];
+            final_cy = centroid[1];
+            final_diam = 2.0 * std::sqrt(max_dist_sq);
         }
+
+        circle_box.center_x = final_cx;
+        circle_box.center_y = final_cy;
+        circle_box.width = final_diam;
+        circle_box.length = final_diam;
+        circle_box.z_min = min_z;
+        circle_box.z_max = max_z;
+        circle_box.heading = 0.0;
+
         return circle_box;
     }
 
