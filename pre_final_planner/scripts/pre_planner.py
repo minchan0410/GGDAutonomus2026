@@ -25,6 +25,8 @@ class PreFinalPlanner:
         self.serial_ok = False
         self.serial_received = False
         self.serial_last_time = None
+        self._last_log_serial_ready = None
+        self._last_log_mode = None
 
         # ---- pubs/subs ----
         self.sub_lane = rospy.Subscriber("/lane_steer", Int16, self.cb_lane_steer, queue_size=1)
@@ -36,8 +38,7 @@ class PreFinalPlanner:
         th = threading.Thread(target=self.keyboard_loop, daemon=True)
         th.start()
 
-        self._log()
-        self._log()
+        self._log(force=True)
 
     def cb_lane_steer(self, msg: Int16):
         with self.lock:
@@ -60,14 +61,22 @@ class PreFinalPlanner:
             return False
         return (rospy.Time.now() - self.serial_last_time).to_sec() <= self.serial_timeout_sec
 
-    def _log(self, error=False, throttle=0.5):
-        serial_txt = "SERIAL OK" if self._serial_ready() else "SERIAL ERROR"
+    def _log(self, force=False, throttle=0.5):
+        serial_ready = self._serial_ready()
+        serial_txt = "SERIAL OK" if serial_ready else "SERIAL ERROR"
         state_txt = self.mode.lower()
         line = f"[PRE_PLANNER] | {serial_txt} | State = {state_txt}"
-        if error:
+
+        if not serial_ready:
             rospy.logwarn_throttle(throttle, line)
-        else:
-            rospy.loginfo_throttle(throttle, line)
+            self._last_log_serial_ready = serial_ready
+            self._last_log_mode = self.mode
+            return
+
+        if force or self._last_log_serial_ready != serial_ready or self._last_log_mode != self.mode:
+            rospy.loginfo(line)
+            self._last_log_serial_ready = serial_ready
+            self._last_log_mode = self.mode
 
     def keyboard_loop(self):
         key_to_mode = {
@@ -89,7 +98,7 @@ class PreFinalPlanner:
             with self.lock:
                 if self.mode != new_mode:
                     if new_mode == "PRE" and not self._serial_ready():
-                        self._log(error=True)
+                        self._log()
                         continue
                     self.mode = new_mode
                     self._log()
@@ -105,7 +114,7 @@ class PreFinalPlanner:
 
             # ---- outputs by mode ----
             if mode == "DEFAULT":
-                self._log(error=not self._serial_ready())
+                self._log()
                 des_steer = self.default_steer
                 motor_cmd = self.default_motor
 
@@ -113,18 +122,18 @@ class PreFinalPlanner:
                 if not self._serial_ready():
                     with self.lock:
                         self.mode = "DEFAULT"
-                    self._log(error=True)
+                    self._log()
                     des_steer = self.default_steer
                     motor_cmd = self.default_motor
                 else:
-                    self._log(error=False)
-                    # pre: lane_steer 패스스루 + 모터 상수로 힘
+                    self._log()
+                    # pre: lane_steer ?�스?�루 + 모터 ?�수�???
                     des_steer = lane_steer
                     motor_cmd = self.pre_motor_cmd
 
             else:
                 # safety fallback
-                self._log(error=True)
+                self._log()
                 des_steer = 0
                 motor_cmd = 0
 
@@ -137,3 +146,4 @@ class PreFinalPlanner:
 if __name__ == "__main__":
     node = PreFinalPlanner()
     node.run()
+
