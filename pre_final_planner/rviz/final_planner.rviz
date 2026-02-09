@@ -6,8 +6,6 @@ Panels:
       Expanded:
         - /Global Options1
         - /Status1
-        - /TF1
-        - /TF1/Frames1
         - /lane_driving/target_point1/Namespaces1
       Splitter Ratio: 0.7382352948188782
     Tree Height: 719
@@ -28,7 +26,7 @@ Panels:
   - Class: rviz/Time
     Name: Time
     SyncMode: 0
-    SyncSource: ""
+    SyncSource: yolo_overlay
 Preferences:
   PromptSaveOnExit: true
 Toolbars:
@@ -106,6 +104,20 @@ Visualization Manager:
       Frame Timeout: 15
       Frames:
         All Enabled: false
+        base_link:
+          Value: true
+        camera_link:
+          Value: true
+        ultrasonic_0_link:
+          Value: false
+        ultrasonic_1_link:
+          Value: false
+        ultrasonic_2_link:
+          Value: false
+        ultrasonic_3_link:
+          Value: false
+        ultrasonic_4_link:
+          Value: false
       Marker Alpha: 1
       Marker Scale: 1
       Name: TF
@@ -113,7 +125,19 @@ Visualization Manager:
       Show Axes: true
       Show Names: true
       Tree:
-        {}
+        base_link:
+          camera_link:
+            {}
+          ultrasonic_0_link:
+            {}
+          ultrasonic_1_link:
+            {}
+          ultrasonic_2_link:
+            {}
+          ultrasonic_3_link:
+            {}
+          ultrasonic_4_link:
+            {}
       Update Interval: 0
       Value: true
     - Align Bottom: false
@@ -176,7 +200,7 @@ Visualization Manager:
       Marker Topic: /lane_bev/markers
       Name: lane_driving/target_point
       Namespaces:
-        {}
+        lane_bev_rviz: true
       Queue Size: 100
       Value: true
     - Class: rviz/MarkerArray
@@ -184,7 +208,7 @@ Visualization Manager:
       Marker Topic: /car_projected_markers
       Name: car_projected
       Namespaces:
-        {}
+        car_projected: true
       Queue Size: 100
       Value: true
     - Class: rviz/MarkerArray
@@ -239,9 +263,9 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.5697963237762451
+      Pitch: 1.1997963190078735
       Target Frame: <Fixed Frame>
-      Yaw: 3.1553964614868164
+      Yaw: 3.1253952980041504
     Saved: ~
 Window Geometry:
   Displays:

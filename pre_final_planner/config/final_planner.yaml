@@ -30,8 +30,8 @@ final_planner:
   # 첫 번째 차선 주행 지속 시간(초)
   lane_driving1_timeout_sec: 7.0
   lane_driving1_timeout_r_sec: 2.0
-  case1_timeout_sec: 7.0
-  case2_timeout_sec: 5.0
+  case1_timeout_sec: 1.0
+  case2_timeout_sec: 2.0
 
   # 좌 차선 변경 완료 후 지연 시간(초)
   left_lc_complete_delay_sec: 0.3
