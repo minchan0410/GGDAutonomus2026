@@ -5,7 +5,7 @@ state_topic: "/traffic"
 
 # ---- yolo weights ----
 # 여기만 너가 찾은 .pt 절대경로로 바꿔서 넣어
-weights: "/home/vic/kkdws/src/object_detector/model/traffic26.pt"
+weights: "/home/vic/kkdws/src/object_detector/model/traffic26_2.pt"
 
 # ---- inference params ----
 conf_th: 0.35
@@ -15,7 +15,7 @@ class_id_green: 0
 class_id_red: 1
 class_id_yellow: 2
 
-roi_x: 0.1
+roi_x: 0.0
 roi_y: 0.1
 roi_w: 0.8
 roi_h: 0.6
