@@ -73,7 +73,7 @@ class FinalPlanner:
         self.queues_maxlen = rospy.get_param("~queues_maxlen", 10)
         self.yolo_count_threshold = rospy.get_param("~yolo_count_threshold", 7)
 
-        self.traffic_green_threshold = rospy.get_param("~traffic_green_threshold", 5)
+        self.traffic_green_threshold = rospy.get_param("~traffic_green_threshold", 3)
         self.traffic_green_timeout = rospy.get_param("~traffic_green_timeout", 20.0)
         # startup guard: block state changes for a few seconds
         self.state_change_delay_sec = rospy.get_param("~state_change_delay_sec", 0.0)
@@ -135,7 +135,7 @@ class FinalPlanner:
         self.lc_start_time = None
 
         self.traffic_light = 0
-        self.traffic_queue = deque(maxlen=self.queues_maxlen)
+        self.traffic_queue = deque(maxlen=5)
         self.traffic_start_time = None
 
         self.left_lane_change_complete = False
@@ -280,7 +280,7 @@ class FinalPlanner:
         val = int(msg.data)
         with self.lock:
             self.traffic_light = val
-            if val in (1, 3):
+            if val in (0, 3):
                 self.traffic_queue.append(val)
 
     def crossline_callback(self, msg: Int16):
