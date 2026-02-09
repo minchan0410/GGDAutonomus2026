@@ -1,8 +1,43 @@
 # 2D LiDAR Car Detection
 
-2D LiDAR를 활용하여 차량을 검출 및 tracking 하는 패키지.
-![Demo GIF](./imgs/tracking1.gif)
-<br><br>
+### 2D LiDAR를 활용하여 주차 미션을 위한 차량을 Detection 및 Tracking 하는 패키지.
+![Demo GIF](./assets/tracking1.gif)
+<br>
+- Id : 4, 6 is parked car
+<br>
+
+## Process
+![process block](./assets/flow.png)
+1. **/scan**을 받아 전처리(ROI) 및 **PointCloud**로 변환 
+2. 이전 프레임에 감지된 객체로부터 **Constant Velocity** 모델을 적용하여 예상 위치 지정. <br>만약 감지된 프레임이 없다면 곧바로 **Euclidean Clustering**을 통해 객체 감지. 
+3. 각 객체의 예상 위치로부터 주변의 **Pointcloud를 객체에 할당**. 
+4. 객체가 할당된 Pointcloud를 가지고 있으면 해당 PointCloud에 **Circle fitting**.<br> PointCloud가 할당되지 않았으면 **Pred 상태 유지**(ex 10프레임 동안 CV로 Prediction)
+5. 객체에 할당되지 않은 나머지 **PointCloud에 대해서 Euclidean Clustering** 진행.
+
+
+### Key Strategies
+- 2D Lidar의 불안정성과 검출되는 Point의 부족함을 고려하여 **Tracking**이 가능하도록 하였음. <br> 또한, 한번 감지한 물체는 처음 Euclidean clustering의 조건에 맞지 않더라도 남아있는 PointCloud가 하나라도 있다면 **지속해서 감지**할 수 있도록 설계함.
+
+- **why not L-shape fitting?** <br>
+Lidar에 찍히는 실제 차량의 PointCloud가 sparse하고 L-Shape이 아닌 상황 많기 때문에 사각형 fitting이 흔들려 center point도 흔들리게 된다. 해당 알고리즘은 parking planner 에서 stanley path을 만드는데 사용됨으로, detection되는 객체의 center point 안정성이 중요하다. 따라서 PointCloud의 중심점을 기반으로 한 피팅 방법을 사용하였다.
+
+## Topics
+
+### Input Topic
+| Name | Type | Uses |
+| :--- | :--- | :--- |
+| `/scan` | `sensor_msgs/LaserScan` | raw data |
+
+### Output Topics
+| Name | Type | Uses |
+| :--- | :--- | :--- |
+| `/local_costmap` | `nav_msgs/OccupancyGrid` | occupancy grid |
+| `/clustered_cloud` | `sensor_msgs/PointCloud2` | visualization & clustering |
+| `/detection_markers` | `visualization_msgs/MarkerArray` | visualization circle |
+| `/detection_poses` | `geometry_msgs/PoseArray` | center point, ID (x, y, ID) |
+| `/detection_poses` | `geometry_msgs/PoseArray` | center point for visualization (z = 0) |
+
+<br>
 
 ## File Structure
 
@@ -44,33 +79,5 @@ laser_detection/
 
 <br>
 
-## Topics
-
-### Input Topic
-| Name | Type | Uses |
-| :--- | :--- | :--- |
-| `/scan` | `sensor_msgs/LaserScan` | raw data |
-
-### Output Topics
-| Name | Type | Uses |
-| :--- | :--- | :--- |
-| `/local_costmap` | `nav_msgs/OccupancyGrid` | occupancy grid |
-| `/clustered_cloud` | `sensor_msgs/PointCloud2` | visualization & clustering |
-| `/detection_markers` | `visualization_msgs/MarkerArray` | visualization circle |
-| `/detection_poses` | `geometry_msgs/PoseArray` | center point, ID (x, y, ID) |
-| `/detection_poses` | `geometry_msgs/PoseArray` | center point for visualization (z = 0) |
-
-<br>
-
-## Process
-1. 유클리디안 클러스터링.
-2. 클러스터 내에서 두 점을 있는 가장 긴 직선의 길이를 구하고, 해당 거리 기반으로 차량으로 추정되는 클러스터를 filtering
-3. 각 클러스터에 ID를 부여하여 tracking 할 수 있도록 함.
-4. 한번 clustering 조건에 부합하면 유클리디안 클러스터링 조건에 맞지 않아도 pointcloud가 완전히 사라지지 않으면 계속 tracking.
-
-5. 완전히 사라지더라도 객체의 마지막 속도 기반으로 Constant Velocity Model을 적용하여 10 프레임 동안 유지.
-
-- **why not L-shape fitting?** (AABB) : lidar에 찍히는 실제 차량의 pointcloud가 sparse하고 L-Shape이 아닌 경우가 많기 때문에 사각형 fitting이 흔들려 center point도 흔들리게 된다. parking planner 에서 stanley path의 안정성이 중요함으로, 클러스터의 중점을 기반으로 한 피팅 방법을 사용.
-
 ### ToDo..
-- fitting 과정 중 정말 차가 아닌 것은 제거할 수 있도록. 하는 알고리즘을 추가.
+- fitting 과정 중 정말 차가 아닌 것(옷, 다리 등)은 제거할 수 있도록. 하는 알고리즘을 추가.
