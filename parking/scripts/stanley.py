@@ -22,7 +22,6 @@ class Stanley:
         self.steer_pub = rospy.Publisher("/parking_stanley_steer", Int16, queue_size=1)
         self.marker_pub = rospy.Publisher("/stanley_debug", Marker, queue_size=10)
         self.debug_text_pub = rospy.Publisher("/stanley_debug_text",OverlayText,queue_size=1,latch=True)
-        self.herr_pub = rospy.Publisher("/herror",Int16,queue_size=1)
         self.path = None
         
         
@@ -85,19 +84,19 @@ class Stanley:
 
         lateral_error = np.dot(n, -ref)
         
-        if lateral_error > 0:
-            lateral_debug_msg = f"ego is on leftside of path, error: {lateral_error}"
-        else:
-            lateral_debug_msg = f"ego is on rightside of path, error: {lateral_error}"
+        # if lateral_error > 0:
+        #     lateral_debug_msg = f"ego is on leftside of path, error: {lateral_error}"
+        # else:
+        #     lateral_debug_msg = f"ego is on rightside of path, error: {lateral_error}"
         
         heading_error = self.wrap(self.path_yaw - motion_yaw)
         
-        if heading_error > 0:
-            heading_debug_msg = f"path direction is on leftside of ego direction, error: {heading_error}"
-        else:
-            heading_debug_msg = f"path direction is on rightside of ego direction, error: {heading_error}"
+        # if heading_error > 0:
+        #     heading_debug_msg = f"path direction is on leftside of ego direction, error: {heading_error}"
+        # else:
+        #     heading_debug_msg = f"path direction is on rightside of ego direction, error: {heading_error}"
         
-        rospy.loginfo_throttle(0.5,f"{lateral_debug_msg}\n{heading_debug_msg}")
+        # rospy.loginfo_throttle(0.5,f"{lateral_debug_msg}\n{heading_debug_msg}")
         
         """
         lateral error:
@@ -137,9 +136,6 @@ class Stanley:
         
         self.last_lateral_error = lateral_error
         self.last_heading_error = heading_error
-        heror_msg = Int16()
-        heror_msg.data = int(math.degrees(self.last_heading_error))
-        self.herr_pub.publish(heror_msg)
         self.last_motion_yaw = motion_yaw
         self.last_path_yaw = self.path_yaw
         self.last_steer = steer
