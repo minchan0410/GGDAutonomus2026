@@ -9,7 +9,7 @@
 
   <!-- robot_description + TF (from my_car_description) -->
   <param name="robot_description"
-         command="$(find xacro)/xacro '$(find my_car_description)/urdf/sls_amg.urdf.xacro'"/>
+    command="$(find xacro)/xacro '$(find my_car_description)/urdf/sls_amg.urdf.xacro'"/>
   <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher" output="screen">
     <param name="publish_frequency" value="50.0"/>
   </node>
