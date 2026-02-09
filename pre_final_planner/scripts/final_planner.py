@@ -67,6 +67,8 @@ class FinalPlanner:
             self.left_lc_complete_delay = rospy.get_param("~left_lc_complete_delay_sec", 0.0)
             self.right_lc_complete_delay = rospy.get_param("~right_lc_complete_delay_sec", 0.0)
             self.lane_driving1_timeout = rospy.get_param("~lane_driving1_timeout_sec", 5.0)
+            self.lane_driving1_timeout_r = rospy.get_param("~lane_driving1_timeout_r_sec", self.lane_driving1_timeout)
+            self.active_lane_driving1_timeout = self.lane_driving1_timeout
 
             self.queues_maxlen = rospy.get_param("~queues_maxlen", 10)
             self.yolo_count_threshold = rospy.get_param("~yolo_count_threshold", 7)
@@ -481,11 +483,42 @@ class FinalPlanner:
                 elif key == "f":
                     if self._serial_ready():
                         self.mode = "FINAL"
+                        self.active_lane_driving1_timeout = self.lane_driving1_timeout
+                        self.lane_driving1_start_time = None
                         self._log()
                     else:
                         self._log(error=True)
-                else:
-                    self._log()
+                elif key == "r":
+                    if self._serial_ready():
+                        self.mode = "FINAL"
+                        self.active_lane_driving1_timeout = self.lane_driving1_timeout_r
+                        self.lane_driving1_start_time = None
+                        rospy.loginfo(f"[FINAL_PLANNER] Start Final mode at 1st obs")
+                        self._log()
+                    else:
+                        self._log(error=True)
+                        
+                elif key == "l":
+                    if self._serial_ready():
+                        self.mode = "FINAL"
+                        self.state = "lane_driving2"
+                        self.start_time = None
+                        self.start_done = True
+                        self.lc_complete_time = None
+                        self.lane_driving1_start_time = None
+                        self.lane_driving2_start_time = None
+                        self.lane_change_reason = "none"
+                        self.left_lane_change_complete = False
+                        self.right_lane_change_complete = False
+                        self.yolo_queue.clear()
+                        self.yolo_crash = False
+                        self.traffic_queue.clear()
+                        self.traffic_start_time = None
+                        rospy.loginfo("[FINAL_PLANNER] Start Final mode at 2nd obs")
+                        self._log()
+                    else:
+                        self._log(error=True)
+
 
     # ---------------- helper: reason latch ----------------
     def _compute_reason(self) -> str:
@@ -525,17 +558,7 @@ class FinalPlanner:
 
             # log state transitions
             if state_local != self.last_state:
-                if state_local == "lane_driving":
-                    self._log()
-                elif state_local == "lane_change":
-                    self._log()
-                elif state_local == "crossline":
-                    self._log()
-                elif state_local == "traffic":
-                    self._log()
-                else:
-                    self._log()
-
+                self._log()
                 self.last_state = state_local
 
             # ---- FREEZE behavior (FINAL + serial lost) ----
@@ -597,7 +620,7 @@ class FinalPlanner:
                             self.lane_driving1_start_time = rospy.Time.now()
                         else:
                             ld1_elapsed = (rospy.Time.now() - self.lane_driving1_start_time).to_sec()
-                            if ld1_elapsed >= self.lane_driving1_timeout:
+                            if ld1_elapsed >= self.active_lane_driving1_timeout:
                                 self.state = "lane_change_to_left"
                                 self.lane_driving1_start_time = None
                                 self.left_lane_change_complete =  False
