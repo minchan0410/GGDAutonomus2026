@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 import rospy
@@ -39,161 +39,171 @@ def _finite(val):
 
 class FinalPlanner:
     def __init__(self):
-            rospy.init_node("final_planner", anonymous=False)
+        rospy.init_node("final_planner", anonymous=False)
 
-            # [FIX] 에러 방지: 콜백이 돌기 전에 시간 기준점 먼저 초기화
-            self.node_start_time = rospy.Time.now()
+        self.rate_hz = rospy.get_param("~rate_hz", 20)
+        self.default_motor = rospy.get_param("~default_motor", 0)
 
-            self.rate_hz = rospy.get_param("~rate_hz", 20)
-            self.default_motor = rospy.get_param("~default_motor", 0)
+        # ---- params ----
+        self.lane_lines_topic = rospy.get_param("~lane_lines_topic", DEFAULT_LANE_LINES_TOPIC)
+        self.roi_offset_x = rospy.get_param("planner_common/roi/offset_x", 0.74)
 
-            # ---- params ----
-            self.lane_lines_topic = rospy.get_param("~lane_lines_topic", DEFAULT_LANE_LINES_TOPIC)
-            self.roi_offset_x = rospy.get_param("planner_common/roi/offset_x", 0.74)
+        # ROI radius (meters)
+        self.roi_radius = rospy.get_param("planner_common/roi/radius", ROI_RADIUS)
+        # ROI sector parameters (degrees): min and max angle (inclusive), 0 = forward.
+        # Defaults: -90..+90 (front 180°)
+        self.roi_angle_min_deg = rospy.get_param("planner_common/roi/angle_min_deg", -90.0)
+        self.roi_angle_max_deg = rospy.get_param("planner_common/roi/angle_max_deg", 90.0)
 
-            # ROI radius (meters)
-            self.roi_radius = rospy.get_param("planner_common/roi/radius", ROI_RADIUS)
-            # ROI sector parameters
-            self.roi_angle_min_deg = rospy.get_param("planner_common/roi/angle_min_deg", -90.0)
-            self.roi_angle_max_deg = rospy.get_param("planner_common/roi/angle_max_deg", 90.0)
+        self.SPEED_0 = rospy.get_param("~speed_0", SPEED_0)
+        self.SPEED_MID = rospy.get_param("~speed_mid", SPEED_MID)
+        self.SPEED_HIGH = rospy.get_param("~speed_high", SPEED_HIGH)
 
-            self.SPEED_0 = rospy.get_param("~speed_0", SPEED_0)
-            self.SPEED_MID = rospy.get_param("~speed_mid", SPEED_MID)
-            self.SPEED_HIGH = rospy.get_param("~speed_high", SPEED_HIGH)
+        self.LC_STEER = rospy.get_param("~lc_steer", LC_STEER)
 
-            self.LC_STEER = rospy.get_param("~lc_steer", LC_STEER)
+        # delay after left lane change complete before transitioning to lane_driving2 (sec)
+        self.left_lc_complete_delay = rospy.get_param("~left_lc_complete_delay_sec", 0.0)
+        self.right_lc_complete_delay = rospy.get_param("~right_lc_complete_delay_sec", 0.0)
 
-            # delay params
-            self.left_lc_complete_delay = rospy.get_param("~left_lc_complete_delay_sec", 0.0)
-            self.right_lc_complete_delay = rospy.get_param("~right_lc_complete_delay_sec", 0.0)
-            self.lane_driving1_timeout = rospy.get_param("~lane_driving1_timeout_sec", 5.0)
-            self.lane_driving1_timeout_r = rospy.get_param("~lane_driving1_timeout_r_sec", self.lane_driving1_timeout)
-            self.active_lane_driving1_timeout = self.lane_driving1_timeout
+        # timeout in lane_driving1 before automatically entering lane_change_to_left (sec)
+        self.lane_driving1_timeout = rospy.get_param("~lane_driving1_timeout_sec", 5.0)
+        self.case1_timeout = rospy.get_param("~case1_timeout_sec", self.lane_driving1_timeout)
+        self.case2_timeout = rospy.get_param("~case2_timeout_sec", 5.0)
 
-            self.queues_maxlen = rospy.get_param("~queues_maxlen", 10)
-            self.yolo_count_threshold = rospy.get_param("~yolo_count_threshold", 7)
+        self.queues_maxlen = rospy.get_param("~queues_maxlen", 10)
+        self.yolo_count_threshold = rospy.get_param("~yolo_count_threshold", 7)
 
-            self.traffic_green_threshold = rospy.get_param("~traffic_green_threshold", 5)
-            self.traffic_green_timeout = rospy.get_param("~traffic_green_timeout", 20.0)
-            
-            # startup guard
-            self.state_change_delay_sec = rospy.get_param("~state_change_delay_sec", 0.0)
-            self.start_ramp_sec = rospy.get_param("~start_ramp_sec", 3.0)
-            self.serial_timeout_sec = rospy.get_param("~serial_timeout_sec", 0.5)
+        self.traffic_green_threshold = rospy.get_param("~traffic_green_threshold", 5)
+        self.traffic_green_timeout = rospy.get_param("~traffic_green_timeout", 20.0)
+        # startup guard: block state changes for a few seconds
+        self.state_change_delay_sec = rospy.get_param("~state_change_delay_sec", 0.0)
+        # start state ramp duration (sec)
+        self.start_ramp_sec = rospy.get_param("~start_ramp_sec", 3.0)
+        # serial readiness gate
+        self.serial_timeout_sec = rospy.get_param("~serial_timeout_sec", 0.5)
+        # ---- lane change params (run2.py aligned) ----
+        self.invalid_value = float(rospy.get_param("~invalid_value", DEFAULT_INVALID_VALUE))
+        self.image_width = int(rospy.get_param("~image_width", DEFAULT_IMAGE_WIDTH))
+        self.image_height = int(rospy.get_param("~image_height", DEFAULT_IMAGE_HEIGHT))
+        self.roi_height = float(rospy.get_param("~roi_height", DEFAULT_ROI_HEIGHT))
+        self.clamp_to_roi = bool(rospy.get_param("~clamp_to_roi", DEFAULT_CLAMP_TO_ROI))
 
-            # ---- lane change params ----
-            self.invalid_value = float(rospy.get_param("~invalid_value", DEFAULT_INVALID_VALUE))
-            self.image_width = int(rospy.get_param("~image_width", DEFAULT_IMAGE_WIDTH))
-            self.image_height = int(rospy.get_param("~image_height", DEFAULT_IMAGE_HEIGHT))
-            self.roi_height = float(rospy.get_param("~roi_height", DEFAULT_ROI_HEIGHT))
-            self.clamp_to_roi = bool(rospy.get_param("~clamp_to_roi", DEFAULT_CLAMP_TO_ROI))
+        # New gating params (raw ddx + rolling distance)
+        # window size (number of samples) for rolling distance
+        self.lc_window_size = int(rospy.get_param("~lc_window_size", 5))
+        # minimum pixel displacement within window
+        self.lc_dist_threshold = float(rospy.get_param("~lc_dist_threshold", 200.0))
+        # ddx threshold (absolute)
+        self.lc_ddx_threshold = float(rospy.get_param("~lc_ddx_threshold", 30000.0))
 
-            # New gating params
-            self.lc_window_size = int(rospy.get_param("~lc_window_size", 5))
-            self.lc_dist_threshold = float(rospy.get_param("~lc_dist_threshold", 200.0))
-            self.lc_ddx_threshold = float(rospy.get_param("~lc_ddx_threshold", 30000.0))
+        # ---- freeze on serial loss (FINAL only) ----
+        self.freeze_on_serial_loss = rospy.get_param("~freeze_on_serial_loss", True)
+        self.frozen = False
+        self.frozen_since = None
+        self.last_serial_ready = None
 
-            # ---- freeze on serial loss (FINAL only) ----
-            self.freeze_on_serial_loss = rospy.get_param("~freeze_on_serial_loss", True)
-            self.frozen = False
-            self.frozen_since = None
-            self.last_serial_ready = None
+        # ---- sync primitives (must exist before any callbacks fire) ----
+        self.lock = threading.Lock()
 
-            # ---- sync primitives ----
-            self.lock = threading.Lock()
+        # ---- state ----
+        self.mode = "DEFAULT"
+        self.last_lane_steer = 0
+        self.lane_steer_received = False
 
-            # ---- state variables (Subscriber보다 먼저 초기화) ----
-            self.mode = "DEFAULT"
-            self.last_lane_steer = 0
-            self.lane_steer_received = False
+        self.state = "start"
+        self.last_state = None
+        self.start_time = None
+        self.start_done = False
+        self.lc_complete_time = None
+        # timer for lane_driving2 duration
+        self.lane_driving2_start_time = None
+        # timer for automatic transition in lane_driving1
+        self.lane_driving1_start_time = None
+        self.case1_start_time = None
+        self.case2_start_time = None
 
-            self.state = "start"
-            self.last_state = None
-            self.start_time = None
-            self.start_done = False
-            self.lc_complete_time = None
-            self.lane_driving2_start_time = None
-            self.lane_driving1_start_time = None
+        # lane-change reason latch (for viz)
+        # "none" | "yolo"
+        self.lane_change_reason = "none"
 
-            self.lane_change_reason = "none"
+        # ---- queues ----
+        self.yolo_queue = deque(maxlen=self.queues_maxlen)
+        self.yolo_crash = False
 
-            # ---- queues (Subscriber보다 먼저 초기화) ----
-            self.yolo_queue = deque(maxlen=self.queues_maxlen)
-            self.yolo_crash = False
+        self.cur_lane = 2
 
-            self.cur_lane = 2
-            self.lc_start_time = None
+        self.lc_start_time = None
 
-            self.traffic_light = 0
-            self.traffic_queue = deque(maxlen=self.queues_maxlen)
-            self.traffic_start_time = None
+        self.traffic_light = 0
+        self.traffic_queue = deque(maxlen=self.queues_maxlen)
+        self.traffic_start_time = None
 
-            self.left_lane_change_complete = False
-            self.right_lane_change_complete = False
-            self.crossline = False
-            self.traffic_stop = False
+        self.left_lane_change_complete = False
+        self.right_lane_change_complete = False
+        self.crossline = False
+        self.traffic_stop = False
 
-            self.serial_ok = False
-            self.serial_received = False
-            self.serial_last_time = None
+        self.serial_ok = False
+        self.serial_received = False
+        self.serial_last_time = None
 
-            # ---- lane change state ----
-            self.latest_lines = None
-            self.last_lane_timer_time = None
-            
-            self.y_top = int(self.image_height * (1.0 - self.roi_height))
-            self.y_mid = int(self.image_height * (1.0 - self.roi_height / 2.0))
-            self.y_bottom = self.image_height
-            self.roi_left_x_mid, self.roi_right_x_mid = self._roi_x_bounds_at_y(self.y_mid)
+        # ---- lane change state ----
+        self.latest_lines = None
+        self.last_lane_timer_time = None
+        # EMA states removed; raw-history buffers used for gating
+        self.y_top = int(self.image_height * (1.0 - self.roi_height))
+        self.y_mid = int(self.image_height * (1.0 - self.roi_height / 2.0))
+        self.y_bottom = self.image_height
+        self.roi_left_x_mid, self.roi_right_x_mid = self._roi_x_bounds_at_y(self.y_mid)
 
-            # history buffers
-            self.left_hist = deque(maxlen=self.lc_window_size)
-            self.right_hist = deque(maxlen=self.lc_window_size)
-            self.left_last_dx = None
-            self.right_last_dx = None
+        # history buffers for raw-based gating
+        self.left_hist = deque(maxlen=self.lc_window_size)  # stores tuples (t_sec, x)
+        self.right_hist = deque(maxlen=self.lc_window_size)
+        self.left_last_dx = None
+        self.right_last_dx = None
 
-            # ---- subs (변수 초기화 후 등록) ----
-            rospy.Subscriber("/lane_steer", Int16, self.lane_steer_callback, queue_size=1)
-            rospy.Subscriber("/cur_lane", Int16, self.cur_lane_callback, queue_size=1)
-            rospy.Subscriber("/car_projected", PoseArray, self.car_projected_callback, queue_size=1)
-            rospy.Subscriber("/traffic", Int16, self.traffic_callback, queue_size=1)
-            rospy.Subscriber("/crossline", Int16, self.crossline_callback, queue_size=1)
-            rospy.Subscriber("/rosserial_check", Int16, self.serial_check_callback, queue_size=1)
-            rospy.Subscriber(self.lane_lines_topic, Int32MultiArray, self.lane_lines_callback, queue_size=1)
+        # ---- subs ----
+        rospy.Subscriber("/lane_steer", Int16, self.lane_steer_callback, queue_size=1)
+        rospy.Subscriber("/cur_lane", Int16, self.cur_lane_callback, queue_size=1)
+        rospy.Subscriber("/car_projected", PoseArray, self.car_projected_callback, queue_size=1)
+        rospy.Subscriber("/traffic", Int16, self.traffic_callback, queue_size=1)
+        rospy.Subscriber("/crossline", Int16, self.crossline_callback, queue_size=1)
+        rospy.Subscriber("/rosserial_check", Int16, self.serial_check_callback, queue_size=1)
+        rospy.Subscriber(self.lane_lines_topic, Int32MultiArray, self.lane_lines_callback, queue_size=1)
 
-            # ---- pubs (actuation) ----
-            self.motor_cmd_steer_pub = rospy.Publisher("/des_steer", Int16, queue_size=1)
-            self.motor_long_pub = rospy.Publisher("/motor_cmd_long", Int16, queue_size=1)
+        # ---- pubs (actuation) ----
+        self.motor_cmd_steer_pub = rospy.Publisher("/des_steer", Int16, queue_size=1)
+        self.motor_long_pub = rospy.Publisher("/motor_cmd_long", Int16, queue_size=1)
 
-            # ---- pubs (viz/status) ----
-            self.state_pub = rospy.Publisher("/final_planner/state", String, queue_size=1)
-            self.yolo_crash_pub = rospy.Publisher("/final_planner/yolo_crash", Bool, queue_size=1)
-            self.reason_pub = rospy.Publisher("/final_planner/lane_change_reason", String, queue_size=1)
-            self.yolo_crash_point_pub = rospy.Publisher("/final_planner/yolo_crash_point", PointStamped, queue_size=1)
-            self.last_yolo_true_point = None
-            
-            # ---- lane change debug pubs ----
-            self.pub_left_x = rospy.Publisher('lane_change/left/x', Float32, queue_size=10)
-            self.pub_right_x = rospy.Publisher('lane_change/right/x', Float32, queue_size=10)
-            self.pub_left_dx = rospy.Publisher('lane_change/left/dx', Float32, queue_size=10)
-            self.pub_left_ddx = rospy.Publisher('lane_change/left/ddx', Float32, queue_size=10)
-            self.pub_right_dx = rospy.Publisher('lane_change/right/dx', Float32, queue_size=10)
-            self.pub_right_ddx = rospy.Publisher('lane_change/right/ddx', Float32, queue_size=10)
-            self.pub_left_complete = rospy.Publisher('lane_change/left/complete', Bool, queue_size=10)
-            self.pub_right_complete = rospy.Publisher('lane_change/right/complete', Bool, queue_size=10)
+        # ---- pubs (viz/status) ----
+        # 매 루프 publish (20Hz)로 사용
+        self.state_pub = rospy.Publisher("/final_planner/state", String, queue_size=1)
+        self.yolo_crash_pub = rospy.Publisher("/final_planner/yolo_crash", Bool, queue_size=1)
+        self.reason_pub = rospy.Publisher("/final_planner/lane_change_reason", String, queue_size=1)
 
-            # ---- Start Logic ----
-            th = threading.Thread(target=self.keyboard_listener, daemon=True)
-            th.start()
-            
-            self.rate = rospy.Rate(self.rate_hz)
-            
-            # [삭제됨] node_start_time은 맨 위에서 이미 초기화함
+        self.yolo_crash_point_pub = rospy.Publisher("/final_planner/yolo_crash_point", PointStamped, queue_size=1)
+        self.last_yolo_true_point = None
+        # ---- lane change debug pubs (plotting) ----
+        # Publishers for raw dx/ddx values (for plotting/debug)
+        self.pub_left_x = rospy.Publisher('lane_change/left/x', Float32, queue_size=10)
+        self.pub_right_x = rospy.Publisher('lane_change/right/x', Float32, queue_size=10)
+        self.pub_left_dx = rospy.Publisher('lane_change/left/dx', Float32, queue_size=10)
+        self.pub_left_ddx = rospy.Publisher('lane_change/left/ddx', Float32, queue_size=10)
+        self.pub_right_dx = rospy.Publisher('lane_change/right/dx', Float32, queue_size=10)
+        self.pub_right_ddx = rospy.Publisher('lane_change/right/ddx', Float32, queue_size=10)
+        # Publishers for lane change completion flags
+        self.pub_left_complete = rospy.Publisher('lane_change/left/complete', Bool, queue_size=10)
+        self.pub_right_complete = rospy.Publisher('lane_change/right/complete', Bool, queue_size=10)
 
-            period = 1.0 / float(self.rate_hz) if self.rate_hz > 0.0 else 0.05
-            rospy.Timer(rospy.Duration(period), self.lane_change_timer_callback)
-            
-            self.run()
+        th = threading.Thread(target=self.keyboard_listener, daemon=True)
+        th.start()
+        self.rate = rospy.Rate(self.rate_hz)
+        self.node_start_time = rospy.Time.now()
+
+        period = 1.0 / float(self.rate_hz) if self.rate_hz > 0.0 else 0.05
+        rospy.Timer(rospy.Duration(period), self.lane_change_timer_callback)
+        self.run()
+
     # ---------------- callbacks ----------------
     def car_projected_callback(self, msg: PoseArray):
         # ✅ FIX: init 중 콜백이 먼저 들어오면 yolo_queue가 아직 없을 수 있음
@@ -483,42 +493,29 @@ class FinalPlanner:
                 elif key == "f":
                     if self._serial_ready():
                         self.mode = "FINAL"
-                        self.active_lane_driving1_timeout = self.lane_driving1_timeout
-                        self.lane_driving1_start_time = None
                         self._log()
                     else:
                         self._log(error=True)
-                elif key == "r":
+                elif key == "1":
                     if self._serial_ready():
                         self.mode = "FINAL"
-                        self.active_lane_driving1_timeout = self.lane_driving1_timeout_r
-                        self.lane_driving1_start_time = None
-                        rospy.loginfo(f"[FINAL_PLANNER] Start Final mode at 1st obs")
+                        self.state = "case1"
+                        self.case1_start_time = None
+                        rospy.loginfo("[FINAL_PLANNER] case1")
                         self._log()
                     else:
                         self._log(error=True)
-                        
-                elif key == "l":
+                elif key == "2":
                     if self._serial_ready():
                         self.mode = "FINAL"
-                        self.state = "lane_driving2"
-                        self.start_time = None
-                        self.start_done = True
-                        self.lc_complete_time = None
-                        self.lane_driving1_start_time = None
-                        self.lane_driving2_start_time = None
-                        self.lane_change_reason = "none"
-                        self.left_lane_change_complete = False
-                        self.right_lane_change_complete = False
-                        self.yolo_queue.clear()
-                        self.yolo_crash = False
-                        self.traffic_queue.clear()
-                        self.traffic_start_time = None
-                        rospy.loginfo("[FINAL_PLANNER] Start Final mode at 2nd obs")
+                        self.state = "case2"
+                        self.case2_start_time = None
+                        rospy.loginfo("[FINAL_PLANNER] case2")
                         self._log()
                     else:
                         self._log(error=True)
-
+                else:
+                    self._log()
 
     # ---------------- helper: reason latch ----------------
     def _compute_reason(self) -> str:
@@ -558,7 +555,17 @@ class FinalPlanner:
 
             # log state transitions
             if state_local != self.last_state:
-                self._log()
+                if state_local == "lane_driving":
+                    self._log()
+                elif state_local == "lane_change":
+                    self._log()
+                elif state_local == "crossline":
+                    self._log()
+                elif state_local == "traffic":
+                    self._log()
+                else:
+                    self._log()
+
                 self.last_state = state_local
 
             # ---- FREEZE behavior (FINAL + serial lost) ----
@@ -620,10 +627,26 @@ class FinalPlanner:
                             self.lane_driving1_start_time = rospy.Time.now()
                         else:
                             ld1_elapsed = (rospy.Time.now() - self.lane_driving1_start_time).to_sec()
-                            if ld1_elapsed >= self.active_lane_driving1_timeout:
+                            if ld1_elapsed >= self.lane_driving1_timeout:
                                 self.state = "lane_change_to_left"
                                 self.lane_driving1_start_time = None
                                 self.left_lane_change_complete =  False
+
+                elif self.state == "case1":
+                    # lane_driving1-equivalent behavior with dedicated timeout
+                    self.lane_change_reason = "none"
+                    self.drive(lane_steer, self.SPEED_HIGH)
+                    with self.lock:
+                        if self.case1_start_time is None:
+                            self.case1_start_time = rospy.Time.now()
+                        else:
+                            case1_elapsed = (rospy.Time.now() - self.case1_start_time).to_sec()
+                            if case1_elapsed >= self.case1_timeout:
+                                self.state = "lane_change_to_left"
+                                self.case1_start_time = None
+                                self.left_lane_change_complete = False
+                                self.lc_complete_time = None
+
                 # lane change to left
                 elif self.state == "lane_change_to_left":
 
@@ -658,6 +681,28 @@ class FinalPlanner:
                             self.state = "lane_change_to_right"
                             self.lane_change_reason = "yolo"
                             self.right_lane_change_complete =  False
+
+                elif self.state == "case2":
+                    # lane_driving2-equivalent drive, but block transitions for case2 timeout
+                    self.lane_change_reason = "none"
+                    self.drive(lane_steer, self.SPEED_HIGH)
+                    with self.lock:
+                        if self.case2_start_time is None:
+                            self.case2_start_time = rospy.Time.now()
+
+                        case2_elapsed = (rospy.Time.now() - self.case2_start_time).to_sec()
+                        if case2_elapsed < self.case2_timeout:
+                            self.yolo_queue.clear()
+                            self.yolo_crash = False
+                        else:
+                            # after timeout, behave like lane_driving2:
+                            # transition only when yolo_crash is detected
+                            if self.yolo_crash:
+                                self.state = "lane_change_to_right"
+                                self.lane_change_reason = "yolo"
+                                self.case2_start_time = None
+                                self.right_lane_change_complete = False
+                                self.lc_complete_time = None
                         
                 elif self.state == "lane_change_to_right":
 
@@ -767,7 +812,3 @@ if __name__ == "__main__":
 # shutting down processing monitor...
 # ... shutting down processing monitor complete
 # done
-
-
-
-
