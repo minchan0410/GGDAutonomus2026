@@ -65,7 +65,7 @@ class PreFinalPlanner:
         serial_ready = self._serial_ready()
         serial_txt = "SERIAL OK" if serial_ready else "SERIAL ERROR"
         state_txt = self.mode.lower()
-        line = f"[PRE_PLANNER] | {serial_txt} | State = {state_txt}"
+        line = f"[PRE_PLANNER] | {serial_txt} |\n State = {state_txt}"
 
         if not serial_ready:
             rospy.logwarn_throttle(throttle, line)
@@ -127,7 +127,7 @@ class PreFinalPlanner:
                     motor_cmd = self.default_motor
                 else:
                     self._log()
-                    # pre: lane_steer ?�스?�루 + 모터 ?�수�???
+                    # pre: lane_steer ?�스?�루 + 모터 ?�수�???
                     des_steer = lane_steer
                     motor_cmd = self.pre_motor_cmd
 
