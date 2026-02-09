@@ -1,5 +1,7 @@
 ﻿#!/usr/bin/env python3
 
+
+#dos2unix 컨버전 완료
 import rospy
 import threading
 from std_msgs.msg import Int16, Bool, String, Int32MultiArray, Float32

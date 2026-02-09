@@ -42,7 +42,7 @@ framerate: 10                       # Camera polling frequency, Hz (integer)
     # It is also possible to have a list of the available control names using v4l2-ctl application from v4l2-util package:
     # v4l2-ctl --device=/dev/video<ID> -L
 intrinsic_controls:                 
-    focus_auto: true
+    focus_auto: false
     exposure_auto_priority: true
     exposure_auto: 3
     white_balance_temperature_auto: true
