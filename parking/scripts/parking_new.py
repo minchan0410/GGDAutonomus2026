@@ -61,6 +61,7 @@ class Parking:
         self.both_updated   = False
         self.lost_second    = False
         self.lost_first     = False
+        self.stop_flag      = False
         # ========================================
         
         
@@ -86,11 +87,7 @@ class Parking:
         self.SERIAL_BAD_TICKS      = 4
         # ========================================
         
-        #TODO
-        self.herror = 0
-        self.stop_flag = False
-        
-        # ========================================
+
         # -------------------variable-------------
         # self.ultrasonics     = [-1, 20000, -1, 20000, 20000, 20000]
         self.start_time      = None
@@ -118,8 +115,7 @@ class Parking:
         rospy.Subscriber("/detection_poses",PoseArray,self.detection_poses_callback,queue_size=1)
         rospy.Subscriber("/parking_lane_steer", Int16, self.lane_steer_callback, queue_size=1)
         rospy.Subscriber("/parking_stanley_steer", Int16, self.stanley_steer_callback, queue_size=1)
-        rospy.Subscriber("/rosserial_check", Int16, self.rosserial_check_callback, queue_size=1)
-        rospy.Subscriber("/herror", Int16, self.herror_callback, queue_size=1)
+        rospy.Subscriber("/rosserial_check", Int16, self.rosserial_check_callback, queue_size=1)        
         
         
         self.motor_cmd_steer_pub = rospy.Publisher("/des_steer", Int16, queue_size=1)
@@ -345,11 +341,6 @@ class Parking:
     def lane_steer_callback(self, msg): self.lane_steer = msg.data
     
     def stanley_steer_callback(self, msg): self.stanley_steer = msg.data
-    
-    def herror_callback(self,msg):
-        self.herror = msg.data
-        if abs(self.herror) > 150:
-            self.stop_flag = True
 
     # def ultrasonic1_callback(self, msg):
     #     if msg.data == -1:
@@ -427,7 +418,6 @@ class Parking:
         elif self.state in ["pause_after_left", "stanley"]:
 
             self.stanley_path(self.filtered_points)
-
             
     def detect_first_car(self, point):
         
@@ -505,7 +495,6 @@ class Parking:
                 return False
             return False
             
-    
     def track_second_car(self, point):
         """
         point: np.ndarray (N, 2) - 현재 프레임의 후보 점들
@@ -540,7 +529,6 @@ class Parking:
                 return False
             return False
 
-    
     def determine_can_parking(self, points):
         self.can_park_TH = points[0, 1] + points[1, 1]
         if self.can_park_TH > self.CAN_PARK_TH:
@@ -664,7 +652,7 @@ class Parking:
             # if all(x < self.ULTRASONIC_THRESHOLD for x in sonics_to_use1) or self.stop_flag:
             if self.stop_flag:
                 self.parked_streak += 1
-                if self.parked_streak >= 1:
+                if self.parked_streak >= 10:
                     self.parked = True
             else:
                 self.parked_streak = max(0, self.parked_streak - 1)
@@ -690,13 +678,25 @@ class Parking:
             return
 
         dest = np.mean(filtered_points, axis=0)
-        v = filtered_points[1] - filtered_points[0]
+        v = filtered_points[1] - filtered_points[0] # 첫번째 차량 -> 두번째 차량을 향하는 벡터
 
-        n = np.array([-v[1], v[0]])
-        n_hat = n / np.linalg.norm(n)
+        n = np.array([-v[1], v[0]])     # v 벡터를 반시계 방향으로 90도 돌린 벡터
+        n_hat = n / np.linalg.norm(n)   # n 벡터의 단위벡터. 즉, 목표점으로부터 차량 쪽 방향으로 나오는 수직선(stanley path의 yaw와 반대 방향)
+        
+        print(f"self.first car: {self.first_car}, self.second car: {self.second_car}, n_hat: {n_hat}")
+        if hasattr(self, "prev_n_hat") and self.prev_n_hat is not None:
 
+            if np.dot(n_hat, self.prev_n_hat) < 0:
+                n_hat = -n_hat
+                
+        self.prev_n_hat = n_hat.copy()
+
+        
         if np.dot(n_hat, -dest) < 0:
-            n_hat = -n_hat
+            self.stop_flag = True
+            rospy.logwarn(f"stop, steak: {self.parked_streak}")
+        else: self.stop_flag = False
+
 
         back_len  = float(self.SP.get("back_len", 2.0))
         front_len = float(self.SP.get("front_len", 5.0))
@@ -1025,7 +1025,7 @@ class Parking:
             f"second_car: {self.second_car_streak}\n"
             f"first_lost: {self.lost_first_streak}\n"
             f"second_lost: {self.lost_second_streak}\n"
-            f"parked: {self.parked_streak}, stop flag: {self.stop_flag}, herror: {self.herror}\n\n"
+            f"parked: {self.parked_streak}, stop flag: {self.stop_flag}\n\n"
             # f"pulled: {self.pulled_streak}\n\n"
             f"rosserial   : {serial_text}\n"
         )
