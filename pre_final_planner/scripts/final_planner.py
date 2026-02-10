@@ -122,6 +122,7 @@ class FinalPlanner:
         self.lane_driving1_start_time = None
         self.case1_start_time = None
         self.case2_start_time = None
+        self.crossline_ignore_time = None
 
         # lane-change reason latch (for viz)
         # "none" | "yolo"
@@ -281,7 +282,7 @@ class FinalPlanner:
         val = int(msg.data)
         with self.lock:
             self.traffic_light = val
-            if val in (0, 3):
+            if val in (1, 2, 3):
                 self.traffic_queue.append(val)
 
     def crossline_callback(self, msg: Int16):
@@ -518,6 +519,7 @@ class FinalPlanner:
                 elif key == "3":
                     if self._serial_ready():
                         self.mode = "FINAL"
+                        self.crossline_ignore_time = None
                         self.state = "crossline"
                         rospy.loginfo("[FINAL_PLANNER] crossline")
                         self._log()
@@ -729,6 +731,8 @@ class FinalPlanner:
                                 if lc_elapsed >= self.right_lc_complete_delay:
                                     # delay elapsed -> move to next state
                                     self.state = "crossline"
+
+                                    self.crossline = False
                                     self.lc_complete_time = None
                                     self.right_lane_change_complete = False
                         else:
@@ -737,12 +741,20 @@ class FinalPlanner:
                             self.lc_complete_time = None
 
                 elif self.state == "crossline":
-                    if self.crossline == 1:  # 횡단보도 정지.
-                        self.drive(lane_steer, self.SPEED_0)
-                        self.traffic_queue.clear()
-                        self.traffic_start_time = rospy.Time.now()
-                        self.state = "traffic"
+                    if self.crossline_ignore_time is None:
+                        self.crossline_ignore_time = rospy.Time.now()
+                    crossline_ignore_elapsed = (rospy.Time.now() - self.crossline_ignore_time).to_sec()
+                    if crossline_ignore_elapsed >= 5:
+
+                        if self.crossline == 1:  # 횡단보도 정지.
+                            self.drive(lane_steer, self.SPEED_0)
+                            self.traffic_queue.clear()
+                            self.traffic_start_time = rospy.Time.now()
+                            self.state = "traffic"
+                        else:
+                            self.drive(lane_steer, self.SPEED_MID)
                     else:
+                        rospy.logwarn("ignoring!!!!!!!")
                         self.drive(lane_steer, self.SPEED_MID)
 
                 # traffic
@@ -753,6 +765,7 @@ class FinalPlanner:
                         traffic_elapsed = (rospy.Time.now() - self.traffic_start_time).to_sec()
                         green_count = sum(1 for v in self.traffic_queue if v == 1)
                         if (green_count >= self.traffic_green_threshold) or (traffic_elapsed >= self.traffic_green_timeout):
+                            rospy.logwarn(f"트래픽:{green_count >= self.traffic_green_threshold}, 시간초과: {traffic_elapsed >= self.traffic_green_timeout}")
                             self.state = "lane_driving2"
                             self.traffic_start_time = None
                         else:

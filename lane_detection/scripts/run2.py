@@ -114,7 +114,7 @@ class LaneDetector:
         self.window_size = 10
         self.steer_history = deque(maxlen=self.window_size)
         
-        self.cross_threshold = 14000  
+        self.cross_threshold = 13000  
         self.cross_queue = deque(maxlen=10) 
         
         self.roi_mask_cpu = None

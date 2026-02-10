@@ -27,14 +27,17 @@ class LaneDetector:
         self.bottom_shrink_ratio = rospy.get_param("~bottom_shrink_ratio", 0.68)
         self.dbscan_eps = rospy.get_param("~dbscan_eps", 15)
         
-        # [추가] 최소 선 검출 개수 설정 (이 값보다 적으면 조향각 0)
+        # [추가] 최소 선 검출 개수 설정
         self.min_line_count = int(rospy.get_param("~min_line_count", 15))
         
-        # [추가] ROI 설정 (BEV 이미지 기준 비율 0.0 ~ 1.0)
+        # [추가] ROI 설정
         self.roi_x_ratio = rospy.get_param("~roi_x_ratio", 0.0)
         self.roi_y_ratio = rospy.get_param("~roi_y_ratio", 0.0) 
         self.roi_w_ratio = rospy.get_param("~roi_w_ratio", 0.5)
         self.roi_h_ratio = rospy.get_param("~roi_h_ratio", 1)
+
+        # 상위 30%만 사용하기 위한 비율 설정
+        self.top_angle_ratio = 0.3 
 
         self.cluster_colors = [(0, 0, 255), (0, 255, 0), (255, 0, 0), (0, 255, 255), (255, 0, 255)]
         self.bridge = CvBridge()
@@ -86,7 +89,7 @@ class LaneDetector:
         h = frame.shape[0]
 
         # ---------------------------------------------------------
-        # 1. BEV 변환 (전체 이미지)
+        # 1. BEV 변환
         # ---------------------------------------------------------
         if self.is_matrix_loaded:
             target_w, target_h = int(self.bev_size[0]), int(self.bev_size[1])
@@ -103,7 +106,6 @@ class LaneDetector:
             bev_img = cv2.warpPerspective(roi_img, M, (w, roi_h), flags=cv2.INTER_LINEAR)
             bev_h, bev_w = roi_h, w
 
-        # 시각화용 이미지 복사
         bev_viz = bev_img.copy()
 
         # ---------------------------------------------------------
@@ -120,7 +122,6 @@ class LaneDetector:
         roi_h = min(bev_h - roi_y, roi_h)
 
         cv2.rectangle(bev_viz, (roi_x, roi_y), (roi_x + roi_w, roi_y + roi_h), (255, 0, 0), 2)
-        cv2.putText(bev_viz, "ROI Area", (roi_x + 5, roi_y + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
 
         if roi_w > 0 and roi_h > 0:
             processing_img = bev_img[roi_y:roi_y+roi_h, roi_x:roi_x+roi_w]
@@ -131,7 +132,7 @@ class LaneDetector:
         # 3. 이미지 처리 (엣지 검출)
         # ---------------------------------------------------------
         gray = cv2.cvtColor(processing_img, cv2.COLOR_BGR2GRAY)
-        blur = cv2.GaussianBlur(gray, (3, 3), 5)
+        blur = cv2.GaussianBlur(gray, (3, 3), 3)
         edges = cv2.Canny(blur, 50, 150)
         
         _, mask = cv2.threshold(gray, 10, 255, cv2.THRESH_BINARY)
@@ -147,6 +148,7 @@ class LaneDetector:
             edges_color[roi_y:roi_y+roi_h, roi_x:roi_x+roi_w] = edges_color_roi
 
         largest_cluster_data = [] 
+        raw_cluster_count = 0 # 필터링 전 Rank 0 개수 (안전장치용)
         
         # ---------------------------------------------------------
         # 4. 라인 분석 및 DBSCAN
@@ -158,13 +160,9 @@ class LaneDetector:
 
             for i, line in enumerate(lines):
                 lx1, ly1, lx2, ly2 = line[0]
-                
-                # 좌표 복원
                 gx1, gy1 = lx1 + roi_x, ly1 + roi_y
                 gx2, gy2 = lx2 + roi_x, ly2 + roi_y
-                
                 if gy1 > gy2: gx1, gy1, gx2, gy2 = gx2, gy2, gx1, gy1
-                
                 global_lines.append([gx1, gy1, gx2, gy2]) 
 
                 dx = gx1 - gx2
@@ -193,67 +191,93 @@ class LaneDetector:
                     sorted_labels = sorted(label_counts, key=label_counts.get, reverse=True)
                     rank_map = {lbl: idx for idx, lbl in enumerate(sorted_labels)}
 
+                    # Rank 0 후보들을 임시 저장할 리스트
+                    rank0_candidates = []
+
                     for idx, label in enumerate(labels):
                         gx1, gy1, gx2, gy2 = global_lines[valid_indices[idx]]
                         angle = data_angles[idx]
 
                         if label == -1:
+                            # 노이즈 (회색)
                             cv2.line(bev_viz, (gx1, gy1), (gx2, gy2), (100, 100, 100), 1)
                         else:
                             rank = rank_map[label]
-                            color = self.cluster_colors[rank % len(self.cluster_colors)]
-                            thickness = 3 if rank == 0 else 1
-                            
-                            cv2.line(edges_color, (gx1, gy1), (gx2, gy2), color, 2)
-                            cv2.line(bev_viz, (gx1, gy1), (gx2, gy2), color, thickness)
                             
                             if rank == 0:
+                                # Rank 0는 즉시 그리지 않고 후보 리스트에 저장
                                 mid_y = (gy1 + gy2) / 2.0
-                                largest_cluster_data.append((angle, mid_y))
+                                rank0_candidates.append({
+                                    'angle': angle,
+                                    'mid_y': mid_y,
+                                    'coords': (gx1, gy1, gx2, gy2)
+                                })
+                            else:
+                                # Rank 0이 아닌 다른 클러스터는 기존대로 그림
+                                color = self.cluster_colors[rank % len(self.cluster_colors)]
+                                cv2.line(bev_viz, (gx1, gy1), (gx2, gy2), color, 1)
+
+                    # -----------------------------------------------------
+                    # [핵심 로직 변경] Rank 0 중 절대값 각도가 작은 상위 30% 선별
+                    # -----------------------------------------------------
+                    raw_cluster_count = len(rank0_candidates)
+                    
+                    if raw_cluster_count > 0:
+                        # 1. 각도 절대값 기준으로 오름차순 정렬 (0도에 가까운 순서)
+                        rank0_candidates.sort(key=lambda x: abs(x['angle']))
+                        
+                        # 2. 상위 30% 개수 계산 (최소 1개는 포함)
+                        cutoff_count = int(raw_cluster_count * self.top_angle_ratio)
+                        if cutoff_count < 1: 
+                            cutoff_count = 1
+                        
+                        # 3. 슬라이싱
+                        selected_lines = rank0_candidates[:cutoff_count]
+                        
+                        # 4. 선택된 라인만 시각화 및 데이터 등록
+                        for item in selected_lines:
+                            gx1, gy1, gx2, gy2 = item['coords']
+                            angle = item['angle']
+                            mid_y = item['mid_y']
+                            
+                            # 초록색으로 굵게 표시
+                            cv2.line(edges_color, (gx1, gy1), (gx2, gy2), (0, 0, 255), 2)
+                            cv2.line(bev_viz, (gx1, gy1), (gx2, gy2), (0, 0, 255), 3)
+                            
+                            largest_cluster_data.append((angle, mid_y))
 
         # ---------------------------------------------------------
-        # 5. 결과 발행 및 시각화 (개수 표시 추가)
+        # 5. 결과 발행 및 시각화
         # ---------------------------------------------------------
-        detected_count = len(largest_cluster_data)
-        
-        # [조건 체크] 감지된 선의 개수가 기준값 미만인가?
-        is_lines_enough = (detected_count >= self.min_line_count)
+        # [주의] min_line_count 판별은 '필터링 전 개수(raw_cluster_count)'로 해야 안전함
+        # 30%만 남기면 개수가 너무 적어져서 멀쩡한 길에서도 멈출 수 있기 때문
+        is_lines_enough = (raw_cluster_count >= self.min_line_count)
+
+        # 실제로 계산에 사용된 라인 수 (디버깅용)
+        used_line_count = len(largest_cluster_data)
 
         if not is_lines_enough:
-            # 조건 불만족 -> Steer 0
             current_avg_angle = 0.0
-            rospy.logdebug(f"Not enough lines detected: {detected_count}/{self.min_line_count}")
+            rospy.logdebug(f"Not enough lines detected. Raw: {raw_cluster_count} (Min: {self.min_line_count})")
             
-            # 시각화 설정 (빨간색)
             info_color = (0, 0, 255)
             status_text = "Mode: FORCE ZERO"
-            arrow_color = (150, 150, 150) # 화살표 회색 처리
+            arrow_color = (150, 150, 150)
         else:
-            # 조건 만족 -> 정상 계산
             weighted_avg_angle = self.calculate_weighted_average_angle(largest_cluster_data)
             current_avg_angle = weighted_avg_angle if weighted_avg_angle is not None else 0.0
             
-            # 시각화 설정 (초록색/노란색)
             info_color = (0, 255, 0)
-            status_text = "Mode: ACTIVE"
+            status_text = f"Mode: ACTIVE (Top 30%: {used_line_count} lines)"
             arrow_color = (0, 255, 255)
 
-        # ---------------------------
-        # 정보 텍스트 그리기 (좌측 상단)
-        # ---------------------------
-        # 1. 감지된 개수 / 최소 기준
-        count_text = f"Lines: {detected_count} (Min: {self.min_line_count})"
+        # 텍스트 정보 표시
+        count_text = f"Raw Lines: {raw_cluster_count} (Min: {self.min_line_count})"
         cv2.putText(bev_viz, count_text, (10, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.7, info_color, 2)
-        
-        # 2. 현재 모드 (ACTIVE vs FORCE ZERO)
-        cv2.putText(bev_viz, status_text, (10, 110), cv2.FONT_HERSHEY_SIMPLEX, 0.7, info_color, 2)
-
-        # 3. 조향각 값
+        cv2.putText(bev_viz, status_text, (10, 110), cv2.FONT_HERSHEY_SIMPLEX, 0.6, info_color, 2)
         cv2.putText(bev_viz, f"Avg Angle: {int(current_avg_angle)}", (10, 50), 
                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, arrow_color, 2)
 
-
-        # 토픽 발행
         angle_msg = Int16()
         angle_msg.data = - int(current_avg_angle * 1.1)
         self.angle_pub.publish(angle_msg)

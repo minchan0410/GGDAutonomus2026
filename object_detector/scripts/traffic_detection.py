@@ -162,7 +162,7 @@ class TrafficDetectionNode:
             final_smoothed_state = STATE_NONE
 
         # 4. 발행 (스무딩된 결과 발행)
-        self.pub_state.publish(Int16(final_smoothed_state))
+        self.pub_state.publish(Int16(frame_result))
 
         # 5. 오버레이 (박스는 현재 프레임 기준, 결과 텍스트는 스무딩된 기준)
         if self.use_overlay:
