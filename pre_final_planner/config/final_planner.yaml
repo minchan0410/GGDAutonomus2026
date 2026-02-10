@@ -55,7 +55,7 @@ final_planner:
   # 신호등 초록 인식 누적 횟수 임계
   traffic_green_threshold: 3
   # 신호 대기 최대 시간(초)
-  traffic_green_timeout: 60.0
+  traffic_green_timeout: 13.0
 
   # ---- lane change (run2.py-aligned) ----
   # 차선 좌표 입력 토픽

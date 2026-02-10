@@ -163,17 +163,21 @@ class Parking:
                 if self.state == "lane_driving":             # 미션 시작해서 일직선으로 주행하는 단계
                     if not self.first_car_detected:
                         self.drive(self.lane_steer, self.FORWARD_SPEED)
+                        # self.drive(4, self.FORWARD_SPEED)
                     else:
                         self.state = "full_left_steer"
+                        self.start_time = rospy.Time.now()
                         continue
 
                 if self.state == "full_left_steer":              # 주차 공간 발견 후 왼쪽으로 살짝 꺾어서 각 만드는 단계
-                    if not self.can_start_parking:
-                        self.drive(self.FULL_LEFT_STEER, self.FORWARD_SPEED)
-                    else:
-                        self.state = "pause_after_left"
-                        self.start_time = rospy.Time.now()
-                        continue
+                    elapsed = (rospy.Time.now() - self.start_time).to_sec()
+                    self.drive(self.FULL_LEFT_STEER, self.FORWARD_SPEED)
+
+                    if self.can_start_parking:
+                        if elapsed >= self.LEFT_STEER_TIME:
+                            self.state = "pause_after_left"
+                            self.start_time = rospy.Time.now()
+                            continue
 
                 if self.state == "pause_after_left":
                     elapsed = (rospy.Time.now() - self.start_time).to_sec()
@@ -241,6 +245,7 @@ class Parking:
         self.PULLOUT_TIME        = rospy.get_param("~timing/pull_out", 1)
         self.GOING_RIGHT_TIME    = rospy.get_param("~timing/going_right", 2.5)
         self.DETECTION_TIME      = rospy.get_param("~timing/detection_start", 4)
+        self.LEFT_STEER_TIME     = rospy.get_param("~timing/left_steer", 3)
 
         # ---------------- threshold ----------------
         self.CAN_PARK_TH = rospy.get_param("~threshold/can_park", -2.0)
@@ -1042,6 +1047,9 @@ class Parking:
         # ---------- 색상 ----------
         if self.first_updated and self.second_updated:
             msg.fg_color = ColorRGBA(0.2, 0.6, 1.0, 1.0)  # 파랑
+            if self.can_start_parking and self.state == "full_left_steer":
+                msg.fg_color = ColorRGBA(1.0, 1.0, 0.0, 1.0)  # 노란색
+                
         else:
             msg.fg_color = ColorRGBA(1.0, 0.5, 0.0, 1.0)  # 주황
             

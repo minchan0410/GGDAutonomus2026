@@ -515,6 +515,14 @@ class FinalPlanner:
                         self._log()
                     else:
                         self._log(error=True)
+                elif key == "3":
+                    if self._serial_ready():
+                        self.mode = "FINAL"
+                        self.state = "crossline"
+                        rospy.loginfo("[FINAL_PLANNER] crossline")
+                        self._log()
+                    else:
+                        self._log(error=True)
                 else:
                     self._log()
 
