@@ -2,7 +2,7 @@
 
 import rospy, math
 import numpy as np
-from std_msgs.msg import Int16, ColorRGBA, Header
+from std_msgs.msg import Int16, Float32, ColorRGBA, Header
 from geometry_msgs.msg import PoseArray
 from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped, Point
@@ -124,6 +124,9 @@ class Parking:
         self.viz_pub = rospy.Publisher("/parking_viz", MarkerArray, queue_size=10)
         self.roi_marker_pub = rospy.Publisher("/roi_marker", Marker, queue_size=10)
         self.debug_text_pub = rospy.Publisher("/debug_overlay_text", OverlayText, queue_size=1, latch=True)
+        self.first_car_y_pub = rospy.Publisher("parking/first_car_y", Float32, queue_size=10)
+        self.second_car_y_pub = rospy.Publisher("parking/second_car_y", Float32, queue_size=10)
+        self.sum_car_y_pub = rospy.Publisher("parking/sum_car_y", Float32, queue_size=10)
         # ====================================================================================================
         
         
@@ -410,6 +413,7 @@ class Parking:
                 )
                 dest = np.mean(self.filtered_points, axis=0)
                 self.publish_parking_viz(dest, self.filtered_points)
+                self.publish_car_y()
                 
         else:
             self.clear_parking_viz(self.SP.get("frame_id", "laser"))
@@ -1061,6 +1065,15 @@ class Parking:
         self.debug_text_pub.publish(msg)
 
     # 화면 고정 텍스트(TEXT_VIEW_FACING): 현재 STATE, 각 차 인지/업데이트 여부, 좌표, steer source, can_park_TH 같은 디버그 상태판
+
+    def publish_car_y(self):
+        first_y = float(self.first_car[0, 1])
+        second_y = float(self.second_car[0, 1])
+        if np.isnan(first_y) or np.isnan(second_y):
+            return
+        self.first_car_y_pub.publish(Float32(first_y))
+        self.second_car_y_pub.publish(Float32(second_y))
+        self.sum_car_y_pub.publish(Float32(first_y + second_y))
 
     # ====================================================================================================
 

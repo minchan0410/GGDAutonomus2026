@@ -18,7 +18,7 @@
     </node>
 
     <!-- occupancy grid -->
-    <node name="occ_grid" pkg="laser_detection" type="occ_grid" output="screen" />
+    <!-- <node name="occ_grid" pkg="laser_detection" type="occ_grid" output="screen" /> -->
       
     <!-- Stanley Controller -->
     <node name="stanley" pkg="parking" type="stanley.py" output="screen" />
