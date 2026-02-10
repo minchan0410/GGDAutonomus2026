@@ -255,7 +255,7 @@ class LaneDetector:
 
         # 토픽 발행
         angle_msg = Int16()
-        angle_msg.data = - int(current_avg_angle * 1.1 - 8)
+        angle_msg.data = - int(current_avg_angle * 1.1 + 4)
         self.angle_pub.publish(angle_msg)
 
         # 화살표 그리기

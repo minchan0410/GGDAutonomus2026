@@ -10,10 +10,10 @@ timing:
   going_right: 4.6
   detection_start: 2
   pull_out: 1
-  left_steer: 5
+  left_steer: 4
 
 threshold:
-  can_park: -3
+  can_park: -4
   ultrasonic: 1000
   track_max_dist: 1.0
 
