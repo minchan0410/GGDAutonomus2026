@@ -21,6 +21,12 @@
 - **why not L-shape fitting?** <br>
 Lidar에 찍히는 실제 차량의 PointCloud가 sparse하고 L-Shape이 아닌 상황 많기 때문에 사각형 fitting이 흔들려 center point도 흔들리게 된다. 해당 알고리즘은 parking planner 에서 stanley path을 만드는데 사용됨으로, detection되는 객체의 center point 안정성이 중요하다. 따라서 PointCloud의 중심점을 기반으로 한 피팅 방법을 사용하였다.
 
+- **Circle fitting method** <br>
+Clustering된 Point Cloud를 통해 차량의 중심으로 예상되는 지점을 차 크기를 고려한 원으로 추정. <br>
+  
+  1. Cluster의 무게 중심 m을 계산.
+  2. lidar -> cluster 벡터(v)를 구하고 Cluster의 point 들을 정사영시킨다.
+  3. 센서로부터 가까운 하위 10% 지점을 구하고 해당 지점 기준 v 방향으로 반지름만큼 떨어진 위치를 중점으로 정한다. 
 ## Topics
 
 ### Input Topic
