@@ -1,31 +1,25 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(lane_detection)
+project(laser_detector)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 add_compile_options(-std=c++14)
-
-set(OpenCV_DIR "/usr/local/lib/cmake/opencv4")
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
+  laser_geometry
+  pcl_conversions
+  pcl_ros
   roscpp
-  rospy
-  std_msgs
   sensor_msgs
-  geometry_msgs
-  cv_bridge
-  image_transport
+  std_msgs
+  visualization_msgs
+  tf
 )
 
 ## System dependencies are found with CMake's conventions
-find_package(OpenCV REQUIRED)
-
-# message(STATUS ">> OpenCV found: ${OpenCV_FOUND}")
-# message(STATUS ">> OpenCV version: ${OpenCV_VERSION}")
-# message(STATUS ">> OpenCV path: ${OpenCV_DIR}")
-# message(STATUS ">> OpenCV include: ${OpenCV_INCLUDE_DIRS}")
+# find_package(Boost REQUIRED COMPONENTS system)
 
 
 ## Uncomment this if the package has a setup.py. This macro ensures
@@ -81,7 +75,7 @@ find_package(OpenCV REQUIRED)
 ## Generate added messages and services with any dependencies listed here
 # generate_messages(
 #   DEPENDENCIES
-#   std_msgs
+#   sensor_msgs#   std_msgs
 # )
 
 ################################################
@@ -114,7 +108,10 @@ find_package(OpenCV REQUIRED)
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-  CATKIN_DEPENDS roscpp sensor_msgs std_msgs geometry_msgs cv_bridge image_transport
+#  INCLUDE_DIRS include
+#  LIBRARIES laser_clustering
+#  CATKIN_DEPENDS laser_geometry pcl_conversions pcl_ros roscpp sensor_msgs std_msgs tf
+#  DEPENDS system_lib
 )
 
 ###########
@@ -126,12 +123,12 @@ catkin_package(
 include_directories(
 # include
   ${catkin_INCLUDE_DIRS}
-  ${OpenCV_INCLUDE_DIRS}
+  ${PCL_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/lane_detection.cpp
+#   src/${PROJECT_NAME}/laser_clustering.cpp
 # )
 
 ## Add cmake target dependencies of the library
@@ -142,12 +139,8 @@ include_directories(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-# add_executable(${PROJECT_NAME}_node src/lane_detection_node.cpp)
-add_executable(lane_detection src/run2.cpp)
-target_link_libraries(lane_detection
-  ${catkin_LIBRARIES}
-  ${OpenCV_LIBRARIES}
-)
+add_executable(detection src/detection.cpp)
+add_executable(occ_grid src/occ_grid.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -160,9 +153,15 @@ target_link_libraries(lane_detection
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-# target_link_libraries(${PROJECT_NAME}_node
-#   ${catkin_LIBRARIES}
-# )
+target_link_libraries(detection
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+)
+
+target_link_libraries(occ_grid
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+)
 
 #############
 ## Install ##
@@ -211,7 +210,7 @@ target_link_libraries(lane_detection
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_lane_detection.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_laser_clustering.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()
