@@ -23,7 +23,18 @@
 
 
 ## Process
-![process block](./assets/flow.png)
+
+### run.py
+![process block](./assets/flow_run2.png)
+1. asdfasdf
+2. asdfasdf
+3. asdasdfasdf
+
+### Key Strategies
+- asdfasdf
+---
+### run2.py
+![process block](./assets/flow_run2.png)
 1. **전처리 :** 수신된 이미지를 GPU로 업로드하여 ROI(관심 영역)를 설정하고, 전처리 및 Canny Edge를 통한 Edge 영역 검출을 통해 차선으로 추정되는 영역을 검출.
 2. **직선 검출 :** 전처리된 Edge 영상에 CUDA 기반 허프 변환(Hough Transform)을 적용하여 차선으로 추정되는 직선 성분들을 검출.
 3. **직선 필터링**
@@ -46,6 +57,10 @@
 HSV를 사용하는 방법도 있지만 이는 다양한 조도와 환경에서 균일하게 적용하기가 매우 어려워 상대적으로 강인한 Edge 탐지 방법을 사용. <br>
 
 ## Topics
+
+### run.py
+---
+### run2.py
 
 ### Input Topic
 | Name | Type | Uses |

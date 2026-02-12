@@ -43,8 +43,12 @@
 
 - **lane_detection**
     <br>
-    Lane detect by OpenCV, additional filtering algorithm (DBSCAN..)
+    Lane detect by OpenCV, additional filtering algorithm
     Crosswalk detect by OpenCV
+
+    <div align="left">
+        <img src="./lane_detector/assets/run2.gif" alt="poster" width="400">
+    </div>
 
 - **laser_detector**
     <br>
