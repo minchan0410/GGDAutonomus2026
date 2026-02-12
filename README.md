@@ -54,9 +54,12 @@
     Lane detect by OpenCV, additional filtering algorithm (DBSCAN..)
     Crosswalk detect by OpenCV
 
-- **laser_detection**
+- **laser_detector**
     <br>
-    Detect parked cars by lidar (parking mission) 
+    Detect parked cars by lidar (parking mission)
+    <div align="center">
+        <img src="./laser_detector/assets/tracking1.gif" alt="poster" width="400">
+    </div> 
 
 - **lateral_controller**
     <br>
