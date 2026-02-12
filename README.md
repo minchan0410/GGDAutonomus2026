@@ -34,14 +34,6 @@
 
 <br>
 
-## **Workspace Structure**
-
-```text
-~ 
-```
-
-<br>
-
 ## Package Overview
 
 ### For mission, system
@@ -83,16 +75,6 @@
     <br>
     to run logitech c920 cameras
 
-<br>
-
-## How to run
-- ~~asdfasd
-
-  asdfasdf
-  ```shell
-  asdfasdf
-  ```
-  
 <br>
 
 # Mission Vids
