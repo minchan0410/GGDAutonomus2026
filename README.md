@@ -57,7 +57,7 @@
 - **laser_detector**
     <br>
     Detect parked cars by lidar (parking mission)
-    <div align="center">
+    <div align="left">
         <img src="./laser_detector/assets/tracking1.gif" alt="poster" width="400">
     </div> 
 
