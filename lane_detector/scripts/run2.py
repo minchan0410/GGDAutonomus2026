@@ -378,19 +378,19 @@ class LaneDetector:
             
         cv2.line(mask_bgr, (cx, 0), (cx, h), (255, 255, 255), 1)
 
-        # Guide Lines
-        guide_offset_top = 145    
-        guide_offset_bottom = 275 
+        # # Guide Lines
+        # guide_offset_top = 145    
+        # guide_offset_bottom = 275 
         
-        cv2.line(mask_bgr, 
-                (cx - guide_offset_top, y_top), 
-                (cx - guide_offset_bottom, h), 
-                (0, 255, 255), 3)
+        # cv2.line(mask_bgr, 
+        #         (cx - guide_offset_top, y_top), 
+        #         (cx - guide_offset_bottom, h), 
+        #         (0, 255, 255), 3)
         
-        cv2.line(mask_bgr,
-                (cx + guide_offset_top, y_top), 
-                (cx + guide_offset_bottom, h), 
-                (0, 255, 255), 3)
+        # cv2.line(mask_bgr,
+        #         (cx + guide_offset_top, y_top), 
+        #         (cx + guide_offset_bottom, h), 
+        #         (0, 255, 255), 3)
 
         area_text = f"White Area: {white_pixel_area}"
         (text_w, text_h), _ = cv2.getTextSize(area_text, cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2)
