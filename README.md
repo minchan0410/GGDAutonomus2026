@@ -2,7 +2,9 @@
 <div align="center">
   <img src="./assets/poster.jpg" alt="poster" width="600">
 </div>
+
 <br>
+
 ### Team Name   : **AJOU NICE**
 ###  Result :  **2nd prize** 🥈 
 
