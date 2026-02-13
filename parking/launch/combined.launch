@@ -25,7 +25,7 @@
     
     
     <!-- Parking Planner-->
-    <node name="parking" pkg="parking" type="parking_new.py" output="screen">
+    <node name="parking" pkg="parking" type="parking.py" output="screen">
       <rosparam command='load' file="$(find parking)/config/parking.yaml"/>
     </node>
 	
