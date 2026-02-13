@@ -31,10 +31,10 @@
 
 ## Key Strategies
 
-- LiDAR 기반 ROI 필터링 및 차량 클러스터링
-- FSM 기반 주차 상태 전이 설계
-- Stanley Controller를 이용한 곡선 경로 추종
-- RViz Marker 및 OverlayText를 활용한 디버깅 시각화
+1. LiDAR 기반 ROI 필터링 및 차량 클러스터링
+2. FSM 기반 주차 상태 전이 설계
+3. Stanley Controller를 이용한 곡선 경로 추종
+4. RViz Marker 및 OverlayText를 활용한 디버깅 시각화
 
 ---
 
@@ -90,12 +90,12 @@ roslaunch parking combined.launch
 
 해당 combined.launch 파일은 다음 노드들을 모두 실행
 
-- RPLIDAR
-- laser_detector
-- lane_detector
-- Stanley Controller
-- Parking FSM Planner
-- RViz
+  - RPLIDAR
+  - laser_detector
+  - lane_detector
+  - Stanley Controller
+  - Parking FSM Planner
+  - RViz
 
 - Alias 등록
 
@@ -103,15 +103,15 @@ roslaunch parking combined.launch
 ```shell
 gedit ~/.bashrc
 ``` 
-아래 내용 추가:
+아래 내용 추가
 ```shell
 alias parking='roslaunch parking combined.launch'
 ``` 
-변경 사항 적용:
+변경 사항 적용
 ```shell
 source ~/.bashrc
 ``` 
-이후 터미널에서 아래 명령어로 실행:
+이후 터미널에서 아래 명령어로 실행
 ```shell
 parking
 ``` 
