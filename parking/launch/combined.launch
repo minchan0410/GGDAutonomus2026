@@ -13,18 +13,15 @@
   
 
     <!-- laser_detection -->
-    <node name="detection" pkg="laser_detection" type="detection" output="screen">
-        <rosparam command="load" file="$(find laser_detection)/config/params.yaml" />
+    <node name="detection" pkg="laser_detector" type="detection" output="screen">
+        <rosparam command="load" file="$(find laser_detector)/config/params.yaml" />
     </node>
 
-    <!-- occupancy grid -->
-    <!-- <node name="occ_grid" pkg="laser_detection" type="occ_grid" output="screen" /> -->
-      
     <!-- Stanley Controller -->
     <node name="stanley" pkg="parking" type="stanley.py" output="screen" />
     
     <!-- Lane Controller-->
-    <node name="run" pkg="lane_detection" type="run.py" output="screen"/>
+    <node name="run" pkg="lane_detector" type="run.py" output="screen"/>
     
     
     <!-- Parking Planner-->
@@ -34,8 +31,5 @@
 	
     <!-- rviz -->
     <node pkg="rviz" type="rviz" name="rviz" args="-d $(find parking)/rviz/detection.rviz" />
-
-    <!-- rosbag TODO -->
-    <!-- <node pkg="rosbag" type="play" name="parking_bag" args="$(find GGDAutonomus2026)/rosbag/parking/parking_done.bag" output="screen" /> -->
 
 </launch>
