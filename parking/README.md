@@ -60,6 +60,7 @@
 Open-loop 제어.
 <br>
 실험적으로 결정된 조향각 및 종방향 속도를 사용해 목적지까지 도달.
+<br>
 ---
 
 ## Key Strategies
@@ -124,33 +125,33 @@ parking/
 ## How to Run
 
 - Launch File 실행
+  ```shell
+  roslaunch parking combined.launch
+  ``` 
+  해당 combined.launch 파일은 다음 노드들을 모두 실행
 
-roslaunch parking combined.launch
-
-해당 combined.launch 파일은 다음 노드들을 모두 실행
-
-  -RPLIDAR
-  -laser_detector
-  -lane_detector
-  -Stanley Controller
-  -Parking FSM Planner
-  -RViz
+    * RPLIDAR
+    * laser_detector
+    * lane_detector
+    * Stanley Controller
+    * Parking FSM Planner
+    * RViz
 
 - Alias 등록
 
-.bashrc에 alias를 등록하여 간편하게 실행
-```shell
-gedit ~/.bashrc
-``` 
-아래 내용 추가
-```shell
-alias parking='roslaunch parking combined.launch'
-``` 
-변경 사항 적용
-```shell
-source ~/.bashrc
-``` 
-이후 터미널에서 아래 명령어로 실행
-```shell
-parking
-``` 
+  .bashrc에 alias를 등록하여 간편하게 실행
+  ```shell
+  gedit ~/.bashrc
+  ``` 
+  아래 내용 추가
+  ```shell
+  alias parking='roslaunch parking combined.launch'
+  ``` 
+  변경 사항 적용
+  ```shell
+  source ~/.bashrc
+  ``` 
+  이후 터미널에서 아래 명령어로 실행
+  ```shell
+  parking
+  ``` 
