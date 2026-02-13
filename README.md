@@ -70,6 +70,14 @@
     <br>
     Pre/Final planner modes: lane following + obstacle/traffic logic (with RViz HUD).
 
+- **parking**
+    <br>
+    Parking planner: using lane + laser detection information, FSM based planner
+
+    <div align="left">
+        <img src="./parking/assets/parking.gif" alt="poster" width="400">
+    </div>
+    
 ### For sensors
 - **rplidar_ros**
     <br>
