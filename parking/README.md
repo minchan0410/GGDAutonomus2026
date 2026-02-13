@@ -20,7 +20,7 @@
 
 ## System Process
 
-![Process Diagram](./assets/parking.png)
+
 
 1. LiDAR 기반 차량 검출  
 2. 차선 정보 기반 lateral control  
