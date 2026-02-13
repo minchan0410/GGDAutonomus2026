@@ -75,7 +75,7 @@
     Parking planner: using lane + laser detection information, FSM based planner
 
     <div align="left">
-        <img src="./parking/assets/parking.gif" alt="poster" width="400">
+        <img src="./parking/assets/parking1.gif" alt="poster" width="400">
     </div>
     
 ### For sensors
