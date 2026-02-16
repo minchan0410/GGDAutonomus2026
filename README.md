@@ -11,9 +11,9 @@
 
 | Name | developement Role (package..) |
 | :--- | :--- |
-| `변지훈` | `하드웨어 세팅` / `lower_controller` / `pre_final_planner` / `object_detector` |
+| `변지훈` | `Hardware Setting` / `lower_controller` / `pre_final_planner` / `object_detector` |
 | `한민규` |  `Team leader` /  `Paper Works`  |
-| `정민찬` | `lane_detector` / `laser_detector` / `object_detector (traffic)` |
+| `정민찬` | `lane_detection` / `laser_detector` / `object_detector (traffic)` |
 | `구동열` | `parking` / `lower_controller` |
 | `전희중` | `lane_detection` / `pre_final_planner` |
 
@@ -38,55 +38,68 @@
 
 ### For mission, system
 - **arduino_motor_bridge**
-    <br>
+    
     Arduino ROS serial bridge for motor PWM control + potentiometer/ultrasonic IO.
-
-- **lane_detection**
     <br>
+- **lane_detection**
+    
     Lane detect by OpenCV, additional filtering algorithm
     Crosswalk detect by OpenCV
 
     <div align="left">
         <img src="./lane_detector/assets/run2.gif" alt="poster" width="400">
     </div>
+    <br>
 
 - **laser_detector**
-    <br>
+
     Detect parked cars by lidar (parking mission)
     <div align="left">
         <img src="./laser_detector/assets/tracking1.gif" alt="poster" width="400">
     </div> 
 
 - **lateral_controller**
-    <br>
     Lower-level steering PID: /des_steer + potentiometer -> /motor_cmd_steer.
+    <div align="left">
+        <img src="./lateral_controller/assets/lower_controller.gif" alt="poster" width="400">
+    </div> 
+    <br>
 
 - **object_detector**
-    <br>
     YOLO car detection + ROI filter, plus 2D->ground projection for nearest car.
     YOLO traffic detection
+    <br>
 
 - **pre_final_planner**
-    <br>
     Pre/Final planner modes: lane following + obstacle/traffic logic (with RViz HUD).
+    <div align="left">
+        <img src="./pre_final_planner/assets/final_planner.gif" alt="poster" width="400">
+    </div> 
+    <br>
 
 - **parking**
-    <br>
     Parking planner: using lane + laser detection information, FSM based planner
 
     <div align="left">
         <img src="./parking/assets/parking1.gif" alt="poster" width="400">
     </div>
-    
+    <br>
+
 ### For sensors
 - **rplidar_ros**
-    <br>
     to run rplidar's 2d lidar
 
 - **usb_cam**
-    <br>
     to run logitech c920 cameras
 
 <br>
 
 # Mission Vids
+
+<div align="left">
+  <img src="./pre_final_planner/assets/final_competition_run.gif" alt="pre_final_planner competition run" width="400">
+</div>
+
+<div align="left">
+  <img src="./parking/assets/parking2.gif" alt="parking competition run" width="400">
+</div>
