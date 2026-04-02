@@ -10,6 +10,10 @@
 
 ![Final Planner State Machine](./assets/final_planner_state_machine.png.png)
 
+## System Process
+
+![Pre Final Planner Diagram](./assets/planner%20diagram.png)
+
 ## Package Role
 
 `pre_final_planner` 패키지는 lane, object, traffic, serial 상태를 입력으로 받아 PRE 주행과 FINAL 주행 모드의 상위 driving logic을 수행하고, 최종 `/des_steer`, `/motor_cmd_long` 명령과 시각화용 상태 정보를 publish 하는 역할을 담당한다.  
@@ -18,9 +22,32 @@
 ## System Boundary
 
 - 입력:
-  `/lane_steer`, `/lane_lines_px`, `/lane_target_px`, `/cur_lane`, `/car_projected`, `/traffic`, `/crossline`, `/rosserial_check`
+
+  | Topic | Type | Description |
+  | :--- | :--- | :--- |
+  | `/lane_steer` | `std_msgs/Int16` | 차선 기반 조향 입력 |
+  | `/lane_lines_px` | `std_msgs/Int32MultiArray` | 좌우 차선 pixel line |
+  | `/lane_target_px` | `geometry_msgs/PointStamped` | lane target pixel |
+  | `/cur_lane` | `std_msgs/Int16` | 현재 lane index |
+  | `/car_projected` | `geometry_msgs/PoseArray` | planner용 장애물 위치 |
+  | `/traffic` | `std_msgs/Int16` | 신호 상태 |
+  | `/crossline` | `std_msgs/Int16` | crossline 검출 결과 |
+  | `/rosserial_check` | `std_msgs/Int16` | rosserial link 상태 |
+
 - 주요 출력:
-  `/des_steer`, `/motor_cmd_long`, `/final_planner/state`, `/final_planner/yolo_crash`, `/final_planner/lane_change_reason`, `/final_planner/yolo_crash_point`, `/final_planner/markers`, `/final_planner/hud`, `/lane_bev/grid`, `/lane_bev/markers`
+
+  | Topic | Type | Description |
+  | :--- | :--- | :--- |
+  | `/des_steer` | `std_msgs/Int16` | 목표 조향각 command |
+  | `/motor_cmd_long` | `std_msgs/Int16` | 종방향 PWM command |
+  | `/final_planner/state` | `std_msgs/String` | FINAL state machine 상태 |
+  | `/final_planner/yolo_crash` | `std_msgs/Bool` | ROI 내 장애물 감지 여부 |
+  | `/final_planner/lane_change_reason` | `std_msgs/String` | 차선 변경 이유 |
+  | `/final_planner/yolo_crash_point` | `geometry_msgs/PointStamped` | 최근접 장애물 위치 |
+  | `/final_planner/markers` | `visualization_msgs/MarkerArray` | planner ROI / state marker |
+  | `/final_planner/hud` | `jsk_rviz_plugins/OverlayText` | planner HUD overlay |
+  | `/lane_bev/grid` | `nav_msgs/OccupancyGrid` | lane pixel 기반 BEV grid |
+  | `/lane_bev/markers` | `visualization_msgs/Marker` | lane BEV marker |
 - 책임 범위:
   PRE / FINAL mode handling, 상태기계 전이, planner level 조향/종방향 명령 생성, planner debug / RViz visualization
 - 책임 범위 아님:

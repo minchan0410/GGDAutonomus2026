@@ -2,6 +2,10 @@
 
 ### 전방/신호등 카메라 영상을 이용해 차량 검출, 지면 좌표 투영, 신호 상태 인식을 제공하는 perception 패키지
 
+## System Process
+
+![Object Detector Diagram](./assets/object%20detector%20diagram.png)
+
 ## Package Role
 
 `object_detector` 패키지는 카메라 입력으로부터 전방 차량과 신호등 상태를 추정하고, planner가 사용할 수 있는 형태의 perception 결과를 publish 하는 역할을 담당한다.  

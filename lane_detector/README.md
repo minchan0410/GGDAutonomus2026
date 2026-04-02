@@ -7,6 +7,10 @@
   <img src="./assets/run2_crossline.gif" alt="run2_crossline" width="350">
 </div>
 
+## System Process
+
+![Lane Detector Diagram](./assets/lane_detector%20diagram.png)
+
 ## Package Role
 
 `lane_detector` 패키지는 전방 카메라 이미지로부터 차선을 검출하고, 주행 로직이 차선 중심 추종에 사용할 수 있는 steering 및 차선 정보를 제공하는 역할을 담당한다.    

@@ -6,6 +6,10 @@
 
 - Example: `ID 4`, `ID 6` is parked car
 
+## System Process
+
+![Laser Detector Diagram](./assets/스크린샷%202026-04-02%20220548.png)
+
 ## Package Role
 
 `laser_detector` 패키지는 lidar scan으로부터 주차된 차량으로 추정되는 Object 후보를 검출하고, `parking` 패키지가 사용할 수 있는 차량의 중심 좌표를 제공하는 역할을 담당한다.  
