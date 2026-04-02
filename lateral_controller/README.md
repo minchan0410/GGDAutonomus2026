@@ -1,113 +1,134 @@
-﻿# Lateral Controller (Lower-Level Steering PID)
+# Lateral Controller
 
-This package is a lower-level steering controller. It receives target steering (`/des_steer`) and steering potentiometer feedback (`/potentiometer`), then outputs motor PWM (`/motor_cmd_steer`) using PID control.
-
-<br>
-
-## Controller Demo
+### `/des_steer`와 `/potentiometer`를 이용해 steering PWM을 생성하는 하위 조향 PID 패키지
 
 ![Lower controller demo](./assets/lower_controller.gif)
-RED : current_steer(deg)
-BLUE : desried_steer(deg)
-MINT : lane_steer(deg)
-<br>
 
-## File Structure
+RED : `cur_steer_deg`  
+BLUE : `desired_steer_deg`  
+MINT : `lane_steer`
 
-```text
-lateral_controller/
-├── CMakeLists.txt
-├── config
-│   ├── lower_controller_multiplot.perspective
-│   └── lower_controller_multiplot.xml
-├── launch
-│   ├── lateral_lower_controller.launch
-│   └── lateral_lower_controller_test.launch
-├── package.xml
-├── README.md
-└── scripts
-    ├── lateral_lower_controller.py
-    ├── lower_controller_test.py
-    └── lower_controller_test_step.py
-```
+## Package Role
 
-<br>
+`lateral_controller` 패키지는 상위 planner 또는 parking 패키지가 생성한 목표 조향각을 실제 steering actuator가 사용할 수 있는 PWM 명령으로 변환하는 하위 제어 패키지이다.  
+본 패키지의 핵심 책임은 `/des_steer` 와 `/potentiometer` 를 입력으로 받아 `/motor_cmd_steer` 를 publish 하고, 디버그용 조향 상태 topic을 함께 제공하는 것이다.
 
-## Nodes
+## System Boundary
 
-### `lateral_lower_controller.py`
-- **Rate**: 20 Hz timer-based loop
-- **Control**: PID + derivative low-pass filter + anti-windup
-- **Safety**: If current steering is out of range, output is forced to 0
+- 입력:
+  `/des_steer`, `/potentiometer`
+- 주요 출력:
+  `/motor_cmd_steer`, `/des_steer_deg`, `/cur_steer_deg`
+- 책임 범위:
+  목표 조향각 수신, potentiometer 기반 현재 조향각 계산, PID 제어, steering PWM publish
+- 책임 범위 아님:
+  목표 조향각 생성, 종방향 제어, Arduino 하드웨어 구동, rosserial heartbeat 감시
+- 상위/하위 관계:
+  입력 : `pre_final_planner`, `parking`, `support/keyboard_control`, `arduino_motor_bridge`
+  출력 : `arduino_motor_bridge`, `rqt_multiplot` 및 debug 확인 환경
 
-### `lower_controller_test.py`
-- Publishes sinusoidal steering input
+## Interface Summary
 
-### `lower_controller_test_step.py`
-- Publishes step steering input
+| Direction | Topic | Type | Description | Used by |
+| :--- | :--- | :--- | :--- | :--- |
+| Input | `/des_steer` | `std_msgs/Int16` | 목표 조향각 command | `lateral_controller` |
+| Input | `/potentiometer` | `std_msgs/Int16` | steering potentiometer raw ADC 값 | `lateral_controller`, `support` |
+| Output | `/motor_cmd_steer` | `std_msgs/Int16` | steering motor PWM command | `arduino_motor_bridge` |
+| Output | `/des_steer_deg` | `std_msgs/Float32` | 목표 조향각 monitor | `rqt_multiplot` / debug |
+| Output | `/cur_steer_deg` | `std_msgs/Float32` | 현재 조향각 monitor | `rqt_multiplot` / debug |
 
-<br>
+## Node Summary
 
-## Topics
+- `lateral_lower_controller.py`
+  - `lateral_lower_controller.launch`에서 실행되는 메인 steering controller 노드.
+  - 20 Hz timer loop에서 PID를 계산하고 `/motor_cmd_steer` 를 publish.
+- `lower_controller_test.py`
+  - sine 형태의 steering 입력을 publish 하는 테스트 노드.
+  - 기본 출력 topic은 `/lane_steer` 이므로 실제 controller 검증 시 `/des_steer` 로 remap 이 필요.
+- `lower_controller_test_step.py`
+  - step 형태의 steering 입력을 publish 하는 테스트 노드다.
+  - 기본 출력 topic은 `/lane_steer` 이므로 실제 controller 검증 시 `/des_steer` 로 remap 이 필요.
 
-### Input Topics
-| Name | Type | Uses |
-| :--- | :--- | :--- |
-| `/des_steer` | `std_msgs/Int16` | Target steering angle (deg) |
-| `/potentiometer` | `std_msgs/Int16` | Steering potentiometer value (raw) |
+## Requirements Summary
 
-### Output Topics
-| Name | Type | Uses |
-| :--- | :--- | :--- |
-| `/motor_cmd_steer` | `std_msgs/Int16` | Steering motor PWM |
-| `/des_steer_deg` | `std_msgs/Float32` | Target steering angle (deg) monitor |
-| `/cur_steer_deg` | `std_msgs/Float32` | Current steering angle (deg) monitor |
+### `lateral_lower_controller.py` node
 
-<br>
+목표 조향각 및 feedback 입력 수신
+- Description:
+  `lateral_lower_controller.py` 는 `/des_steer` 와 `/potentiometer` 를 수신하고, potentiometer raw 값을 steering degree로 변환하여 제어 계산에 사용해야 한다.
+- Interface:
+  Input=`/des_steer` (`std_msgs/Int16`), `/potentiometer` (`std_msgs/Int16`), Output=`/cur_steer_deg` (`std_msgs/Float32`)
+- Verification:
+  실차를 통해 테스트 시 `/cur_steer_deg` 가 연속적으로 갱신되는지 확인한다.
+- Constraint / Fault Note:
+  potentiometer 보정값이 실제 차량과 맞지 않으면 현재 조향각 추정과 안전 범위 판단이 함께 어긋날 수 있다.
 
-## Key Constants (code)
+PID 기반 steering PWM 계산 및 publish
+- Description:
+  메인 노드는 20 Hz timer loop에서 목표 조향각과 현재 조향각 오차를 이용해 PID 출력을 계산하고, steering motor용 PWM을 `/motor_cmd_steer` 로 publish 해야 한다.
+- Interface:
+  Input=`/des_steer`, `/potentiometer`, Output=`/motor_cmd_steer` (`std_msgs/Int16`), `/des_steer_deg` (`std_msgs/Float32`)
+- Verification:
+  step 또는 sine steering 입력을 넣었을 때 `/motor_cmd_steer` 가 생성되고, `/des_steer_deg` 와 `/cur_steer_deg` 를 통해 목표값 추종 경향을 확인한다.
+- Constraint / Fault Note:
+  현재 PID gain과 loop 주기는 코드 상수로 고정되어 있으며, 급격한 입력 변화에서는 overshoot 또는 진동이 발생할 수 있다.
 
-These constants are currently hardcoded in `scripts/lateral_lower_controller.py`.
+범위 이탈 시 안전 출력 제한
+- Description:
+  현재 조향각이 허용 범위를 벗어나고 desired steer도 limit 부근에 있는 경우 `out_of_range()` 조건에 따라 `/motor_cmd_steer` 를 0으로 강제해야 한다.
+- Interface:
+  Output=`/motor_cmd_steer`, `/cur_steer_deg`
+- Verification:
+  potentiometer 값이 허용 범위를 벗어나는 실차 조건에서 `/motor_cmd_steer` 가 0으로 제한되는지 확인한다.
+- Constraint / Fault Note:
+  현재 구현에는 `/des_steer` timeout 처리가 없으므로 입력이 끊기면 마지막 command가 유지될 수 있다.
 
-| Name | Meaning | Default |
-| :--- | :--- | :--- |
-| `GT_LEFT_MAX`, `GT_RIGHT_MAX` | Steering angle limits (deg) | `+22.5`, `-22.5` |
-| `Kp`, `Ki`, `Kd` | PID gains | `14.0`, `0.0`, `1.0` |
-| `u_max` | PWM limit | `255` |
-| `MARGIN` | Safety margin (deg) | `1.5` |
-| `POT_LEFT_MAX`, `POT_RIGHT_MAX` | Potentiometer range | `576`, `422` |
+## Verification Scenario
 
-<br>
+- 실행 준비 : 실차 rosserial 환경 준비, 확인 topic 은 `/motor_cmd_steer`, `/des_steer_deg`, `/cur_steer_deg`
+- 확인 방법: `rostopic echo`, `rqt_multiplot`, step 또는 sine steering 입력에 대한 응답 확인
 
-## How to Run
+통과 판단 기준:
+- `/des_steer` 입력 시 `/motor_cmd_steer` 가 생성된다.
+- `/des_steer_deg` 와 `/cur_steer_deg` 를 통해 목표/현재 조향각 비교가 가능하다.
+- 허용 범위 밖 조건에서 `/motor_cmd_steer` 가 0으로 제한된다.
 
-### 1) Lower controller
-```shell
-roslaunch lateral_controller lateral_lower_controller.launch
-```
+## Parameters
 
-If `with_rqt:=false` is set, the rqt multiplot UI will not be launched.
-```shell
-roslaunch lateral_controller lateral_lower_controller.launch with_rqt:=false
-```
+현재 구현은 YAML parameter가 아니라 `scripts/lateral_lower_controller.py` 의 code constant 기반으로 동작한다.
 
-### 2) Test input (sine / step)
-The test nodes publish to **`/lane_steer`** by default.  
-For real controller input, remap it to `/des_steer`.
+| Source | Name | Value | Meaning |
+| :--- | :--- | :--- | :--- |
+| code constant | `POT_LEFT_MAX` | `600` | potentiometer 좌측 끝 보정값 |
+| code constant | `POT_RIGHT_MAX` | `445` | potentiometer 우측 끝 보정값 |
+| code constant | `POT_TOTAL_RANGE_DEGREE` | `270` | raw ADC 값을 degree로 환산할 때 사용하는 전체 회전 범위 |
+| derived | `POT_CENTER` | `(POT_LEFT_MAX + POT_RIGHT_MAX) / 2.0` | steering center 기준값 |
+| code constant | `GT_LEFT_MAX` | `22.5` | 허용 좌측 조향각 limit |
+| code constant | `GT_RIGHT_MAX` | `-22.5` | 허용 우측 조향각 limit |
+| code constant | `Kp` | `14.0` | PID proportional gain |
+| code constant | `Ki` | `0.0` | PID integral gain |
+| code constant | `Kd` | `1.0` | PID derivative gain |
+| code constant | `u_max` | `255` | PWM saturation limit |
+| code constant | `MARGIN` | `1.5` | out-of-range 판정 margin |
+| code constant | `alpha` | `0.9` | derivative low-pass filter 계수 |
+| code constant | `hz` | `20.0` | controller timer loop 주기 |
 
-```shell
-rosrun lateral_controller lower_controller_test.py /lane_steer:=/des_steer
-```
+메모:
+- tuning 값은 현재 launch 또는 YAML에서 조정되지 않고 코드에 직접 박혀 있다.
+- 테스트 노드는 `/lane_steer` 를 publish 하므로 실제 controller 입력에는 remap 이 필요하다.
 
-```shell
-rosrun lateral_controller lower_controller_test_step.py /lane_steer:=/des_steer
-```
+## Limitations / Fault Cases
 
-Or edit `launch/lateral_lower_controller_test.launch` and add remap settings.
+- `/potentiometer` feedback 이 없으면 closed-loop steering 동작 검증이 불가능하다.
+- potentiometer calibration 이 실제 차량과 다르면 `/cur_steer_deg` 와 안전 조건이 모두 틀어질 수 있다.
+- 현재 구현에는 `/des_steer` timeout 이 없어 입력이 끊겨도 마지막 목표 조향각이 남을 수 있다.
 
-<br>
 
-## Notes
-- `/potentiometer` is converted from range `0~1023` to steering angle.
-- If `out_of_range()` condition is true, PWM output is fixed to `0`.
-- `POT_LEFT_MAX`, `POT_RIGHT_MAX` needs to be adjusted before every run. 
+## Implementation Notes
+
+1. `/des_steer` 를 받아 허용 조향각 범위 안으로 clamp 한다.
+2. `/potentiometer` raw 값을 `POT_CENTER` 와 `POT_TOTAL_RANGE_DEGREE` 기준으로 현재 조향각 degree로 변환한다.
+3. 목표값과 현재값 오차로 PID 출력을 계산하고, derivative 성분에는 low-pass filter를 적용한다.
+4. 출력이 saturation 되면 integral 항을 되감는 방식으로 anti-windup 을 적용한다.
+5. `out_of_range()` 조건이 참이면 steering PWM을 0으로 강제하고, debug topic을 함께 publish 한다.
+

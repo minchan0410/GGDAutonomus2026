@@ -1,118 +1,148 @@
-## object_detector
+# Object Detector
 
-YOLO 기반 차량/신호등 인식과 차량 위치 투영을 제공하는 ROS 패키지.
-데이터 수집용 이미지 클릭 저장 노드도 포함됨.
+### 전방/신호등 카메라 영상을 이용해 차량 검출, 지면 좌표 투영, 신호 상태 인식을 제공하는 perception 패키지
 
----
+## Package Role
 
-### 구성
-```
-config/
-  object_detection.yaml
-  object_projection.yaml
-  traffic_detection.yaml
-launch/
-  object_detector.launch
-scripts/
-  object_detection.py
-  object_projection.py
-  traffic_detection.py
-  image_saver.py
-```
+`object_detector` 패키지는 카메라 입력으로부터 전방 차량과 신호등 상태를 추정하고, planner가 사용할 수 있는 형태의 perception 결과를 publish 하는 역할을 담당한다.  
+본 패키지의 핵심 책임은 `/cam1/usb_cam/image_raw` 에서 차량을 검출해 `/car_projected` 로 변환하고, `/cam2/usb_cam/image_raw` 에서 신호 상태를 검출해 `/traffic` 로 제공하는 것이다.
 
----
+## System Boundary
 
-### 주요 노드
+- 입력:
+  `/cam1/usb_cam/image_raw`, `/cam2/usb_cam/image_raw`
+- 주요 출력:
+  `/car_detection`, `/car_projected`, `/car_projected_markers`, `/traffic`, `/yolo_overlay/image`, `/traffic_overlay/image`
+- 책임 범위:
+  차량 detection, 차량 bbox 기반 지면 좌표 투영, 신호 상태 분류, RViz/debug overlay publish
+- 책임 범위 아님:
+  장애물 회피 판단, 차량 추종 제어, 경로 생성, 최종 정지/출발 판단
+- 상위/하위 관계:
+  입력 : `usb_cam`
+  출력 : `pre_final_planner`, RViz 및 debug 확인 환경
 
-#### 1) `object_detection.py`
-차량만 필터링하는 YOLO 검출 노드.
+## Interface Summary
 
-**Topics**
-- Sub: `/cam1/usb_cam/image_raw` (`sensor_msgs/Image`)
-- Pub: `/car_detection` (`vision_msgs/Detection2DArray`)
-- Pub: `/yolo_overlay/image` (`sensor_msgs/Image`, optional)
+| Direction | Topic | Type | Description | Used by |
+| :--- | :--- | :--- | :--- | :--- |
+| Input | `/cam1/usb_cam/image_raw` | `sensor_msgs/Image` | 전방 차량 검출용 camera image | `object_detector` |
+| Input | `/cam2/usb_cam/image_raw` | `sensor_msgs/Image` | 신호등 검출용 camera image | `object_detector` |
+| Output | `/car_detection` | `vision_msgs/Detection2DArray` | 차량 bbox detection 결과 | `object_projection.py` |
+| Output | `/car_projected` | `geometry_msgs/PoseArray` | planner용 차량 지면 좌표 | `pre_final_planner` |
+| Output | `/car_projected_markers` | `visualization_msgs/MarkerArray` | projected 차량 marker | RViz |
+| Output | `/traffic` | `std_msgs/Int16` | 신호 상태 결과 (`0` NONE, `1` GREEN, `2` RED, `3` YELLOW) | `pre_final_planner` |
+| Output | `/yolo_overlay/image` | `sensor_msgs/Image` | 차량 detection overlay image | RViz / debug |
+| Output | `/traffic_overlay/image` | `sensor_msgs/Image` | 신호 detection overlay image | RViz / debug |
 
-**Params (private)**
-- `image_topic` : 입력 이미지 토픽
-- `model_path` : YOLO 가중치 파일 경로
-- `conf_thres` : confidence 임계값
-- `device` : CUDA 디바이스 (예: `"0"`)
-- `car_class_name` : 유지할 클래스 이름 (기본 `"car"`)
-- `car_topic` : 차량 검출 결과 토픽
-- `overlay/*` : 오버레이 표시 설정
-- `roi/bottom_exclude_ratio` : 하단 ROI 제외 비율
-- `pub_rate` : 퍼블리시 주기 (Hz)
+## Node Summary
 
----
+- `object_detection.py`
+  - `object_detector.launch`에서 실행되는 차량 검출 노드다.
+  - YOLO 결과 중 `car_class_name` 에 해당하는 bbox만 `/car_detection` 으로 publish 한다.
+- `object_projection.py`
+  - `/car_detection` 을 받아 지면으로 투영하여 `/car_projected` 를 생성하는 노드다.
+  - projected marker를 `/car_projected_markers` 로 함께 publish 할 수 있다.
+- `traffic_detection.py`
+  - 신호등 ROI 내부 YOLO 결과를 이용해 `/traffic` 상태를 publish 하는 노드다.
+  - overlay를 통해 현재 프레임의 박스와 상태를 함께 표시한다.
 
-#### 2) `object_projection.py`
-검출된 차량을 지면 좌표계로 투영하여 모든 차량을 퍼블리시.
+## Requirements Summary
 
-**Topics**
-- Sub: `/car_detection` (`vision_msgs/Detection2DArray`)
-- Pub: `/car_projected` (`geometry_msgs/PoseArray`)
-- Pub: `/car_projected_markers` (`visualization_msgs/MarkerArray`, optional)
+### `object_detection.py` node
 
-**Params**
-- `sub_car_topic`, `pub_car_projected_topic`, `pub_markers_topic`
-- `frame_id` : 기준 프레임 (예: `base_link`)
-- `camera/*` : 카메라 파라미터 (fx, fy, cx, cy, height, pitch_deg)
-- `marker/*` : RViz 마커 설정
+전방 차량 bbox 검출 및 publish
+- Description:
+  `object_detection.py` 는 `/cam1/usb_cam/image_raw` 를 입력으로 수신하고, YOLO 결과 중 설정된 `car_class_name` 에 해당하는 객체만 선택하여 `/car_detection` 으로 publish 해야 한다.
+- Interface:
+  Input=`/cam1/usb_cam/image_raw` (`sensor_msgs/Image`), Output=`/car_detection` (`vision_msgs/Detection2DArray`)
+- Verification:
+  전방 차량이 포함된 rosbag replay 또는 실시간 camera 입력에서 `/car_detection` 이 생성되고, 차량이 없는 구간에서는 빈 `Detection2DArray` 가 publish 되는지 확인한다.
+- Constraint / Fault Note:
+  모델 경로가 잘못되었거나 YOLO inference가 실패하면 detection 결과가 비어 있을 수 있으며, 하단 ROI 제외 조건 때문에 화면 하단 차량은 의도적으로 무시될 수 있다.
 
----
+### `object_projection.py` node
 
-#### 3) `traffic_detection.py`
-신호등 색상 검출 노드 (CUDA GPU 필수).
+차량 detection 결과의 지면 좌표 투영
+- Description:
+  `object_projection.py` 는 `/car_detection` 의 bbox 하단 중심을 카메라 파라미터 기반으로 지면에 투영하여 `/car_projected` 를 생성해야 한다.
+- Interface:
+  Input=`/car_detection` (`vision_msgs/Detection2DArray`), Output=`/car_projected` (`geometry_msgs/PoseArray`), `/car_projected_markers` (`visualization_msgs/MarkerArray`)
+- Verification:
+  차량 detection이 존재하는 bag 또는 입력에서 `/car_projected` 가 생성되고, detection 수 감소 시 marker가 삭제되는지 확인한다.
+- Constraint / Fault Note:
+  현재 투영은 평지와 고정 카메라 자세를 가정한 단순 모델이므로 camera calibration 오차나 pitch 오차가 있으면 위치 추정이 크게 흔들릴 수 있다.
 
-**Topics**
-- Sub: `/cam2/usb_cam/image_raw` (`sensor_msgs/Image`)
-- Pub: `/traffic` (`std_msgs/Int16`)
-- Pub: `/traffic_overlay/image` (`sensor_msgs/Image`, optional)
+### `traffic_detection.py` node
 
-**Params**
-- `weights` : YOLO 가중치 파일 경로
-- `conf_th`
-- `class_id_green/red/yellow`
-- `roi_x/roi_y/roi_w/roi_h` : ROI 비율
-- `queue_len` : 결과 평활화 길이
-- `overlay_enable`, `overlay_topic`
+신호등 상태 분류 및 publish
+- Description:
+  `traffic_detection.py` 는 `/cam2/usb_cam/image_raw` 에 대해 ROI 내부 신호등 YOLO 결과를 분류하여 `/traffic` 상태값을 publish 해야 한다.
+- Interface:
+  Input=`/cam2/usb_cam/image_raw` (`sensor_msgs/Image`), Output=`/traffic` (`std_msgs/Int16`), `/traffic_overlay/image` (`sensor_msgs/Image`)
+- Verification:
+  신호등이 포함된 rosbag replay 또는 실시간 camera 입력에서 `/traffic` 상태 변화가 발생하고, overlay에서 ROI 및 검출 박스를 확인할 수 있는지 점검한다.
+- Constraint / Fault Note:
+  본 노드는 CUDA가 없으면 실행되지 않으며,`/traffic` publish 는 현재 프레임 결과를 그대로 사용한다.
 
-**State Mapping**
-- `0`: NONE
-- `1`: GREEN
-- `2`: RED
-- `3`: YELLOW
+## Verification Scenario
 
----
+- 실행 준비 / 확인 topic:
+  `/cam1/usb_cam/image_raw`, `/cam2/usb_cam/image_raw` 가 포함된 rosbag replay 또는 실시간 camera 환경 준비, 확인 topic 은 `/car_detection`, `/car_projected`, `/car_projected_markers`, `/traffic`, `/yolo_overlay/image`, `/traffic_overlay/image`
+- 확인 방법:
+  `rostopic echo`, RViz image / marker 확인, planner 입력 topic 생성 여부 확인
 
-#### 4) `image_saver.py`
-마우스 클릭 시 이미지 저장하는 유틸 노드.
+권장 bag :
+- `lane_change_1.bag`
+- `lane_change_2.bag`
+- `traffic_1.bag`
+- `traffic_2.bag` 
 
-**Params**
-- `image_topic`
-- `compressed`
-- `save_dir`
-- `prefix`
-- `jpeg_quality`
+통과 판단 기준:
+- 차량이 보이는 구간에서 `/car_detection` 과 `/car_projected` 가 생성된다.
+- detection이 없을 때 `/car_projected` 는 빈 `PoseArray` 로 유지되고 marker가 정리된다.
+- 신호등이 보이는 구간에서 `/traffic` 상태가 갱신되며, red light / else 에 대한 구분이 가능하다.
+- RViz 또는 image topic에서 `/yolo_overlay/image`, `/traffic_overlay/image` 확인이 가능하다.
 
----
+## Parameters
 
-### 실행
-```
-roslaunch object_detector object_detector.launch
-```
 
----
+| Source | Name | Value | Meaning |
+| :--- | :--- | :--- | :--- |
+| `object_detection.yaml` | `image_topic` | `/cam1/usb_cam/image_raw` | 차량 검출용 camera topic |
+| `object_detection.yaml` | `model_path` | `/home/vic/kkdws/src/object_detector/model/yolo26s.pt` | 차량 검출 YOLO weight 경로 |
+| `object_detection.yaml` | `conf_thres` | `0.1` | 차량 detection confidence threshold |
+| `object_detection.yaml` | `device` | `"0"` | YOLO inference device 설정 |
+| `object_detection.yaml` | `car_class_name` | `"car"` | publish 대상으로 남길 class 이름 |
+| `object_detection.yaml` | `car_topic` | `/car_detection` | 차량 detection 결과 topic |
+| code default | `roi/bottom_exclude_ratio` | `0.1` | 이미지 하단 ROI 제외 비율 |
+| code default | `pub_rate` | `20.0` | `object_detection.py` publish loop 주기 |
+| `object_detection.yaml` | `overlay/topic` | `/yolo_overlay/image` | 차량 overlay image topic |
+| `object_projection.yaml` | `sub_car_topic` | `/car_detection` | detection 입력 topic |
+| `object_projection.yaml` | `pub_car_projected_topic` | `/car_projected` | projected pose output topic |
+| `object_projection.yaml` | `pub_markers_topic` | `/car_projected_markers` | projected marker topic |
+| `object_projection.yaml` | `frame_id` | `base_link` | projection 결과 기준 frame |
+| `object_projection.yaml` | `camera/fx fy cx cy` | `505.0742 / 531.2114 / 352.6202 / 135.9729` | 640x480 기준 camera intrinsics |
+| `object_projection.yaml` | `camera/height` | `0.75` | camera height |
+| `object_projection.yaml` | `camera/pitch_deg` | `-14.5` | camera pitch |
+| code default | `object_projection pub_rate` | `20.0` | `object_projection.py` publish loop 주기 |
+| `traffic_detection.yaml` | `image_topic` | `/cam2/usb_cam/image_raw` | 신호등 검출용 camera topic |
+| `traffic_detection.yaml` | `state_topic` | `/traffic` | 신호 상태 topic |
+| `traffic_detection.yaml` | `weights` | `/home/vic/kkdws/src/object_detector/model/traffic26_2.pt` | traffic YOLO weight 경로 |
+| `traffic_detection.yaml` | `conf_th` | `0.35` | 신호 detection confidence threshold |
+| `traffic_detection.yaml` | `class_id_green/red/yellow` | `0 / 1 / 2` | 신호등 class id mapping |
+| `traffic_detection.yaml` | `roi_x y w h` | `0.0 / 0.1 / 0.8 / 0.6` | 신호등 관심영역 ROI 비율 |
+| code default | `queue_len` | `3` | traffic 결과 smoothing queue 길이 |
+| code default | `overlay_topic` | `/traffic_overlay/image` | traffic overlay image topic |
 
-### 설정 파일 안내
-- `config/object_detection.yaml` : 차량 검출 설정 및 가중치 경로
-- `config/traffic_detection.yaml` : 신호등 검출 설정 및 가중치 경로
-- `config/object_projection.yaml` : 카메라 내/외부 파라미터
 
----
+## Limitations / Fault Cases
 
-### 의존성
-- ROS: `rospy`, `vision_msgs`, `sensor_msgs`, `geometry_msgs`, `visualization_msgs`
-- OpenCV / `cv_bridge`
-- Ultralytics YOLO
-- PyTorch (CUDA 필요: `traffic_detection.py`)
+- `traffic_detection.py` 는 CUDA가 없으면 시작 단계에서 종료된다.
+- `object_projection.py` 는 평지 가정의 단순 투영이므로 실제 장애물 거리와 오차가 생길 수 있다.
+- `image_saver.py` 는 수집용 유틸리티일 뿐 planner 입력 파이프라인에는 연결되지 않는다.
+
+## Implementation Notes
+
+1. `object_detection.py` 는 YOLO 결과에서 `car` class만 남기고, 하단 ROI 제외 조건을 통과한 bbox만 `/car_detection` 으로 publish 한다.
+2. `object_projection.py` 는 bbox 하단 중심 pixel을 지면으로 투영해 `/car_projected` 를 만들고 marker를 함께 관리한다.
+3. `traffic_detection.py` 는 ROI 내부 신호등 bbox를 class별로 집계해 상태를 결정하고 `/traffic` 및 overlay를 publish 한다.

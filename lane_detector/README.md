@@ -33,7 +33,7 @@
 | Output | `/lane_steer` | `std_msgs/Int16` | 차선 기반 steering 입력 | `pre_final_planner` |
 | Output | `/lane_lines_px` | `std_msgs/Int32MultiArray` | 좌/우 대표 차선 pixel line | `pre_final_planner` |
 | Output | `/lane_target_px` | `geometry_msgs/PointStamped` | 목표 midpoint pixel 좌표 | `pre_final_planner` |
-| Output | `/crossline` | `std_msgs/Int16` | crossline 검출 상태 | `pre_final_planner` |
+| Output | `/crossline` | `std_msgs/Int16` | 0 : 미검출, 1 : 검출 | `pre_final_planner` |
 
 
 ## Node Summary
@@ -139,8 +139,8 @@
 5. 대표 좌/우 차선을 계산하고 midpoint를 이용해 steering을 산출한다.
 6. crossline 여부를 white pixel area 기반으로 판단해 `/crossline`을 publish한다.
 
-설계 메모:
-- 30fps camera 입력을 따라가기 위해 `cv2.cuda` 기반 처리를 사용한다.
+memo :
+- 30fps 출력을 목표로 CPU 사용으로 인한 오버헤드를 줄이기 위해 `cv2.cuda` 기반 처리를 사용한다.
 - steering 출력의 high frequency를 줄이기 위해 moving average를 사용한다.
 - 좌/우 차선의 물리적으로 모순되는 위치는 제거하여 대표 차선을 계산한다.
 - `lane_lines_px`와 `lane_target_px`를 함께 publish해 downstream visualization과 분석이 가능하도록 한다.
