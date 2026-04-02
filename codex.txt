@@ -1,0 +1,239 @@
+[목적]
+이 문서는 Codex가 ROS 패키지(또는 단일 노드 중심 패키지)의 README를 작성할 때 참고할 기준이다.
+목표는 "요구사항 명세 기반으로 개발된 패키지"처럼 보이도록 구조를 잡는 것이다. 다만 과장하거나 코드에 없는 기능을 추가로 주장하지 말고, 실제 코드/launch/config/topic 기준으로만 작성한다.
+
+핵심 방향은 다음과 같다.
+1) 노드별 요구사항은 최대 3개까지만 둔다.
+2) 대신 input / output topic 인터페이스를 선명하게 드러낸다.
+3) README가 단순 알고리즘 설명서가 아니라, 시스템 역할 / 경계 / 요구사항 / 검증 흐름이 보이도록 쓴다.
+4) 검증은 rosbag replay, topic 확인, RViz 확인 등 실제 ROS 개발 흐름과 연결되게 적는다.
+
+==================================================================
+1. README 작성 원칙
+==================================================================
+- 한국어로 작성한다.
+- 톤은 학생 보고서보다 "개발 문서"에 가깝게 한다.
+- "무엇을 한다"보다 "어떤 입력을 받아 어떤 출력으로 책임을 수행한다"를 먼저 보여준다.
+- 요구사항은 많게 나열하지 말고, 각 노드당 3개 이내로 압축한다.
+- 요구사항 문장은 가능한 한 "~해야 한다" 형식으로 쓴다.
+- 모호한 표현(안정적으로, 적절히, 빠르게, 정확하게)은 피하고, 가능하면 검증 가능한 표현으로 바꾼다.
+- 알고리즘 구현 세부(clustering, circle fitting 등)는 요구사항이 아니라 "구현 개요" 또는 "설계 메모" 섹션에 둔다.
+- 코드에서 확인되지 않는 topic 이름, frame_id, 주기, 파라미터 값은 임의로 만들지 않는다. 불명확하면 TODO 또는 "코드 기준 확인 필요"라고 표기한다.
+
+==================================================================
+2. Codex가 README를 만들 때 따라야 할 우선순위
+==================================================================
+1) 패키지의 역할을 2~4문장으로 요약
+2) 시스템 경계(system boundary)와 상위/하위 패키지 관계 설명
+3) 입력 / 출력 인터페이스를 표로 정리
+4) 노드별 요구사항을 3개 이내로 정리
+5) 검증 방법(rosbag, rostopic echo, RViz, launch)을 연결
+6) 제약사항 / 예상 결함 / failure case 정리
+7) 파라미터 및 실행 방법 정리
+
+즉, README의 중심축은 아래 순서를 따른다.
+패키지 역할 -> 인터페이스 -> 요구사항 -> 검증 -> 제약사항 -> 사용 방법
+
+==================================================================
+3. 권장 README 목차
+==================================================================
+# Package Role
+- 패키지가 시스템 전체에서 맡는 역할
+- 상위 시스템에서 왜 필요한지
+- 다른 패키지와의 관계
+
+# System Boundary
+- 이 패키지가 책임지는 범위
+- 책임지지 않는 범위(예: 최종 주차 제어는 parking 패키지 담당)
+- 입력 데이터의 출처와 출력 데이터의 소비 주체
+
+# Interface Summary
+- 입력 topic / 출력 topic / message type / 의미 / 사용처
+- 가능하면 표로 작성
+
+# Node Summary
+- 패키지 내 노드 목록
+- 각 노드의 1줄 역할 설명
+
+# Requirements Summary
+- 노드별 요구사항 3개 이내
+- 각 요구사항은 ID, Description, Interface, Verification, Constraint를 포함
+
+# Verification Scenario
+- 어떤 bag, 어떤 launch, 어떤 topic을 보면 되는지
+- 통과 판단 기준
+
+# Parameters
+- 주요 params.yaml 항목
+- 결과에 어떤 영향을 주는지
+
+# Limitations / Fault Cases
+- 입력 누락, sparse point, clutter, TF 문제, CPU 부하 등
+
+# Run Guide
+- launch 명령어
+- bag replay 방법
+- 확인해야 할 topic / RViz item
+
+==================================================================
+4. 요구사항 서술 규칙
+==================================================================
+각 요구사항은 아래 형식을 따른다.
+
+- ID: FR-XXX 또는 IF-XXX 또는 NFR-XXX
+- Title: 짧은 제목
+- Description: 시스템이 해야 할 동작
+- Interface: 관련 input / output topic 명시
+- Verification: 어떤 방법으로 확인하는지
+- Constraint / Fault Note: 한계 또는 예상 failure mode
+
+예시 형식:
+[FR-LD-01] /scan 전처리 및 유효 point 선정
+Description: laser_detector는 /scan을 입력으로 수신하여 설정된 ROI 내부의 유효 point만 후속 detection에 사용해야 한다.
+Interface: Input=/scan (sensor_msgs/LaserScan), Output=/clustered_cloud (sensor_msgs/PointCloud2)
+Verification: 지정 rosbag replay 후 ROI 내부 point 기반의 clustered_cloud가 생성되는지 확인한다.
+Constraint / Fault Note: lidar 입력 누락 또는 ROI 과소 설정 시 객체 후보가 생성되지 않을 수 있다.
+
+주의:
+- Description에는 구현 알고리즘 이름을 과도하게 박지 않는다.
+- Verification에는 "무엇을 보면 통과인지"를 쓴다.
+- Constraint에는 실제 ROS 환경에서 발생 가능한 failure를 쓴다.
+
+==================================================================
+5. 노드별 요구사항 수를 3개 이내로 줄이는 기준
+==================================================================
+세부 기능을 전부 쪼개지 말고, 아래 3축으로 압축한다.
+
+축 A. 입력 처리 및 전처리
+- 입력 수신
+- 유효성 판단
+- ROI / filtering / timeout 처리
+
+축 B. 핵심 기능 수행
+- detection / tracking / planning / control 중 노드의 본 기능
+
+축 C. 출력 및 예외 처리
+- publish
+- fallback
+- stale output 제거
+- fault 대응
+
+즉, 한 노드의 요구사항은 대체로 아래처럼 압축하면 된다.
+1) 입력을 받아 유효 데이터로 정리해야 한다.
+2) 핵심 기능을 수행해야 한다.
+3) 결과를 publish하고 입력 이상 시 안전하게 처리해야 한다.
+
+==================================================================
+6. 인터페이스를 잘 드러내는 방법
+==================================================================
+README에서 가장 중요한 표 중 하나는 인터페이스 표다.
+아래 형식을 권장한다.
+
+| Direction | Topic | Type | Description | Used by |
+|-----------|-------|------|-------------|---------|
+| Input | /scan | sensor_msgs/LaserScan | raw lidar scan | laser_detector |
+| Output | /clustered_cloud | sensor_msgs/PointCloud2 | clustering 결과 시각화 | RViz / debug |
+| Output | /detection_markers | visualization_msgs/MarkerArray | tracked object marker | RViz |
+| Output | /detection_poses | geometry_msgs/PoseArray | parking이 사용할 parked car 중심 좌표 | parking |
+
+작성 규칙:
+- Topic 이름은 코드/launch 기준으로 정확히 쓴다.
+- message type을 반드시 적는다.
+- Description은 "무슨 값인가"보다 "누가 왜 쓰는가"까지 보여준다.
+- 가능하면 Used by 컬럼을 둬서 상위 시스템 연결성을 보여준다.
+
+==================================================================
+7. Codex가 README에 넣으면 좋은 문장 스타일
+==================================================================
+좋은 예:
+- 본 패키지는 lidar 기반 parked car 후보를 검출하고, parking 패키지가 사용할 수 있는 중심 좌표를 제공한다.
+- 시스템 관점에서 보면 본 패키지는 perception 결과를 parking 모듈에 전달하는 입력 유닛이다.
+- 본 패키지의 핵심 책임은 /scan으로부터 주차 대상 후보를 추정하고, 검출 결과를 일관된 topic 인터페이스로 publish하는 것이다.
+- 본 패키지는 검출 결과뿐 아니라 debug용 point cloud 및 marker를 함께 제공하여 bag replay 기반 검증이 가능하도록 한다.
+
+피해야 할 예:
+- 매우 정확하게 검출한다.
+- 실시간으로 잘 동작한다.
+- 안정적이다.
+- 강건하다.
+
+위 표현들은 근거 없는 홍보 문구처럼 보이기 쉽다.
+대신 아래처럼 바꾼다.
+- 지정 bag replay 기준으로 검출 결과를 확인할 수 있다.
+- 입력 topic이 정상 수신되는 동안 결과 topic이 연속적으로 갱신된다.
+- 입력 누락 시 stale detection을 유지하지 않도록 설계되었다.
+
+==================================================================
+8. README에 바로 넣을 수 있는 예시 구조 (laser_detector 패키지 기준)
+==================================================================
+# Package Role
+laser_detector 패키지는 lidar scan으로부터 parked car 후보를 검출하고, parking 패키지가 사용할 수 있는 중심 좌표를 제공하는 역할을 담당한다.
+시스템 관점에서 보면 본 패키지는 parking 기능을 위한 lidar 기반 perception 결과를 제공하는 유닛이다.
+
+# System Boundary
+- 입력: /scan
+- 출력: /clustered_cloud, /detection_markers, /detection_poses
+- 본 패키지는 parked car 후보의 검출 및 추적까지를 담당한다.
+- 최종 주차 경로 생성 및 차량 제어는 상위 parking 패키지의 책임 범위에 속한다.
+
+# Interface Summary
+| Direction | Topic | Type | Description | Used by |
+|-----------|-------|------|-------------|---------|
+| Input | /scan | sensor_msgs/LaserScan | raw lidar scan | laser_detector |
+| Output | /clustered_cloud | sensor_msgs/PointCloud2 | ROI 및 clustering 결과 시각화 | RViz |
+| Output | /detection_markers | visualization_msgs/MarkerArray | tracked object marker | RViz |
+| Output | /detection_poses | geometry_msgs/PoseArray | parking이 사용하는 parked car 중심 좌표 | parking |
+
+# Node Summary
+- laser_detector_node: /scan을 입력으로 받아 parked car 후보를 검출하고 추적 결과를 publish한다.
+
+# Requirements Summary
+[FR-LD-01] 입력 전처리
+- Description: laser_detector_node는 /scan을 입력으로 수신하고, 설정된 유효 영역 내 point만 detection 처리에 사용해야 한다.
+- Interface: Input=/scan, Output=/clustered_cloud
+- Verification: bag_parking_lidar_basic_01 replay 후 ROI 내부 point 기반의 /clustered_cloud가 생성되는지 확인한다.
+- Constraint / Fault Note: lidar 입력 누락 또는 ROI 설정 오류 시 객체 후보가 생성되지 않을 수 있다.
+
+[FR-LD-02] parked car 후보 검출 및 추적
+- Description: laser_detector_node는 유효 point들로부터 parked car 후보를 생성하고, 연속 프레임에서 동일 객체에 대한 tracking을 유지해야 한다.
+- Interface: Input=/scan, Output=/detection_markers, /detection_poses
+- Verification: bag_parking_lidar_basic_01 및 bag_parking_lidar_sparse_01 replay 후 동일 parked car가 연속 프레임에서 추적되는지 확인한다.
+- Constraint / Fault Note: sparse point, clutter, 장시간 point 손실 시 miss detection 또는 ID 변경이 발생할 수 있다.
+
+[FR-LD-03] 결과 publish 및 입력 이상 대응
+- Description: laser_detector_node는 검출된 parked car 중심 좌표를 /detection_poses로 publish해야 하며, 유효 입력이 없을 때 stale detection 결과를 장시간 유지하지 않아야 한다.
+- Interface: Output=/detection_poses, /detection_markers
+- Verification: bag_parking_lidar_empty_01 및 bag_system_fallback_01 replay 후 입력 공백 구간에서 stale output이 남지 않는지 확인한다.
+- Constraint / Fault Note: 짧은 입력 공백에서는 tracking prediction이 일시적으로 유지될 수 있다.
+
+# Verification Scenario
+- roslaunch로 detector와 visualization을 실행한다.
+- rosbag replay로 지정 bag를 1x 속도로 재생한다.
+- /clustered_cloud, /detection_markers, /detection_poses를 확인한다.
+- 필요 시 RViz에서 cluster와 marker를 함께 검토한다.
+
+# Limitations / Fault Cases
+- clutter가 많은 환경에서는 false positive가 증가할 수 있다.
+- point가 sparse한 경우 parked car 중심 추정이 불안정할 수 있다.
+- CPU 부하가 큰 환경에서는 output gap이 증가할 수 있다.
+
+==================================================================
+9. Codex에 직접 줄 수 있는 작성 지시문
+==================================================================
+아래 지시문을 그대로 프롬프트로 사용해도 된다.
+
+"이 패키지의 README를 한국어로 작성하라. 목적은 알고리즘 설명서가 아니라, 요구사항 명세 기반으로 개발된 ROS 패키지처럼 보이도록 구조를 잡는 것이다. 단, 코드에 없는 기능을 지어내지 말고 실제 launch, config, topic, message type 기준으로만 작성하라. README는 다음 순서를 따르라: Package Role -> System Boundary -> Interface Summary -> Node Summary -> Requirements Summary -> Verification Scenario -> Parameters -> Limitations -> Run Guide. 각 노드의 요구사항은 최대 3개로 제한하고, 세부 알고리즘은 구현 개요 수준으로만 설명하라. 입출력 topic과 message type, 상위 패키지와의 연결 관계를 표로 명확히 드러내라. 검증 방법은 rosbag replay와 topic/RViz 확인 중심으로 작성하라. 불명확한 값은 추정하지 말고 TODO로 남겨라." 
+
+==================================================================
+10. 마지막 체크리스트
+==================================================================
+README 최종본은 아래 질문에 모두 답할 수 있어야 한다.
+- 이 패키지는 시스템에서 정확히 무슨 역할을 하는가?
+- 어떤 topic을 입력으로 받고, 어떤 topic을 출력하는가?
+- 출력은 누가 사용하는가?
+- 핵심 요구사항 3개는 무엇인가?
+- 어떤 bag/launch로 검증 가능한가?
+- 어떤 상황에서 실패하거나 성능이 떨어질 수 있는가?
+- 파라미터를 바꾸면 어떤 동작이 달라지는가?
+
+이 체크리스트에 답이 되면 README가 단순 소개문이 아니라, 요구사항 기반 개발 문서처럼 보인다
