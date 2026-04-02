@@ -53,35 +53,15 @@ MINT : `lane_steer`
 
 ### `lateral_lower_controller.py` node
 
-목표 조향각 및 feedback 입력 수신
-- Description:
-  `lateral_lower_controller.py` 는 `/des_steer` 와 `/potentiometer` 를 수신하고, potentiometer raw 값을 steering degree로 변환하여 제어 계산에 사용해야 한다.
-- Interface:
-  Input=`/des_steer` (`std_msgs/Int16`), `/potentiometer` (`std_msgs/Int16`), Output=`/cur_steer_deg` (`std_msgs/Float32`)
-- Verification:
-  실차를 통해 테스트 시 `/cur_steer_deg` 가 연속적으로 갱신되는지 확인한다.
-- Constraint / Fault Note:
-  potentiometer 보정값이 실제 차량과 맞지 않으면 현재 조향각 추정과 안전 범위 판단이 함께 어긋날 수 있다.
+#### 기능 요구사항
 
-PID 기반 steering PWM 계산 및 publish
-- Description:
-  메인 노드는 20 Hz timer loop에서 목표 조향각과 현재 조향각 오차를 이용해 PID 출력을 계산하고, steering motor용 PWM을 `/motor_cmd_steer` 로 publish 해야 한다.
-- Interface:
-  Input=`/des_steer`, `/potentiometer`, Output=`/motor_cmd_steer` (`std_msgs/Int16`), `/des_steer_deg` (`std_msgs/Float32`)
-- Verification:
-  step 또는 sine steering 입력을 넣었을 때 `/motor_cmd_steer` 가 생성되고, `/des_steer_deg` 와 `/cur_steer_deg` 를 통해 목표값 추종 경향을 확인한다.
-- Constraint / Fault Note:
-  현재 PID gain과 loop 주기는 코드 상수로 고정되어 있으며, 급격한 입력 변화에서는 overshoot 또는 진동이 발생할 수 있다.
+| 기능 | 설명 | Input | Output |
+| :--- | :--- | :--- | :--- |
+| 조향각 feedback 수신 및 변환 | `/potentiometer` raw 값을 steering degree로 변환하여 제어 계산에 사용해야 한다 | `/des_steer`, `/potentiometer` | `/cur_steer_deg` |
+| PID 기반 steering PWM 계산 및 publish | 20Hz loop에서 목표/현재 조향각 오차로 PID 출력을 계산하고 `/motor_cmd_steer` 를 publish 해야 한다 | `/des_steer`, `/potentiometer` | `/motor_cmd_steer`, `/des_steer_deg` |
+| 범위 이탈 시 안전 출력 제한 | 현재 조향각이 허용 범위를 벗어난 경우 `out_of_range()` 조건에 따라 `/motor_cmd_steer` 를 0으로 강제해야 한다 | - | `/motor_cmd_steer` |
 
-범위 이탈 시 안전 출력 제한
-- Description:
-  현재 조향각이 허용 범위를 벗어나고 desired steer도 limit 부근에 있는 경우 `out_of_range()` 조건에 따라 `/motor_cmd_steer` 를 0으로 강제해야 한다.
-- Interface:
-  Output=`/motor_cmd_steer`, `/cur_steer_deg`
-- Verification:
-  potentiometer 값이 허용 범위를 벗어나는 실차 조건에서 `/motor_cmd_steer` 가 0으로 제한되는지 확인한다.
-- Constraint / Fault Note:
-  현재 구현에는 `/des_steer` timeout 처리가 없으므로 입력이 끊기면 마지막 command가 유지될 수 있다.
+#### 비기능 요구사항
 
 ## Verification Scenario
 

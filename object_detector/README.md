@@ -54,39 +54,33 @@
 
 ### `object_detection.py` node
 
-전방 차량 bbox 검출 및 publish
-- Description:
-  `object_detection.py` 는 `/cam1/usb_cam/image_raw` 를 입력으로 수신하고, YOLO 결과 중 설정된 `car_class_name` 에 해당하는 객체만 선택하여 `/car_detection` 으로 publish 해야 한다.
-- Interface:
-  Input=`/cam1/usb_cam/image_raw` (`sensor_msgs/Image`), Output=`/car_detection` (`vision_msgs/Detection2DArray`)
-- Verification:
-  전방 차량이 포함된 rosbag replay 또는 실시간 camera 입력에서 `/car_detection` 이 생성되고, 차량이 없는 구간에서는 빈 `Detection2DArray` 가 publish 되는지 확인한다.
-- Constraint / Fault Note:
-  모델 경로가 잘못되었거나 YOLO inference가 실패하면 detection 결과가 비어 있을 수 있으며, 하단 ROI 제외 조건 때문에 화면 하단 차량은 의도적으로 무시될 수 있다.
+#### 기능 요구사항
+
+| 기능 | 설명 | Input | Output |
+| :--- | :--- | :--- | :--- |
+| 전방 차량 bbox 검출 및 publish | YOLO 결과 중 `car_class_name` 에 해당하는 객체만 선택해 publish 해야 한다 | `/cam1/usb_cam/image_raw` | `/car_detection` |
+
+#### 비기능 요구사항
 
 ### `object_projection.py` node
 
-차량 detection 결과의 지면 좌표 투영
-- Description:
-  `object_projection.py` 는 `/car_detection` 의 bbox 하단 중심을 카메라 파라미터 기반으로 지면에 투영하여 `/car_projected` 를 생성해야 한다.
-- Interface:
-  Input=`/car_detection` (`vision_msgs/Detection2DArray`), Output=`/car_projected` (`geometry_msgs/PoseArray`), `/car_projected_markers` (`visualization_msgs/MarkerArray`)
-- Verification:
-  차량 detection이 존재하는 bag 또는 입력에서 `/car_projected` 가 생성되고, detection 수 감소 시 marker가 삭제되는지 확인한다.
-- Constraint / Fault Note:
-  현재 투영은 평지와 고정 카메라 자세를 가정한 단순 모델이므로 camera calibration 오차나 pitch 오차가 있으면 위치 추정이 크게 흔들릴 수 있다.
+#### 기능 요구사항
+
+| 기능 | 설명 | Input | Output |
+| :--- | :--- | :--- | :--- |
+| 차량 detection 결과의 지면 좌표 투영 | bbox 하단 중심을 카메라 파라미터 기반으로 지면에 투영하여 `/car_projected` 를 생성해야 한다 | `/car_detection` | `/car_projected`, `/car_projected_markers` |
+
+#### 비기능 요구사항
 
 ### `traffic_detection.py` node
 
-신호등 상태 분류 및 publish
-- Description:
-  `traffic_detection.py` 는 `/cam2/usb_cam/image_raw` 에 대해 ROI 내부 신호등 YOLO 결과를 분류하여 `/traffic` 상태값을 publish 해야 한다.
-- Interface:
-  Input=`/cam2/usb_cam/image_raw` (`sensor_msgs/Image`), Output=`/traffic` (`std_msgs/Int16`), `/traffic_overlay/image` (`sensor_msgs/Image`)
-- Verification:
-  신호등이 포함된 rosbag replay 또는 실시간 camera 입력에서 `/traffic` 상태 변화가 발생하고, overlay에서 ROI 및 검출 박스를 확인할 수 있는지 점검한다.
-- Constraint / Fault Note:
-  본 노드는 CUDA가 없으면 실행되지 않으며,`/traffic` publish 는 현재 프레임 결과를 그대로 사용한다.
+#### 기능 요구사항
+
+| 기능 | 설명 | Input | Output |
+| :--- | :--- | :--- | :--- |
+| 신호등 상태 분류 및 publish | ROI 내부 신호등 YOLO 결과를 분류하여 `/traffic` 상태값을 publish 해야 한다 | `/cam2/usb_cam/image_raw` | `/traffic`, `/traffic_overlay/image` |
+
+#### 비기능 요구사항
 
 ## Verification Scenario
 

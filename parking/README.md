@@ -70,73 +70,25 @@
 
 ### `parking.py` node
 
-parked car 추적 및 주차 시작 판단
-- Description:
-  `parking.py` 는 `/detection_poses` 를 입력으로 받아 첫 번째 parked car 와 두 번째 parked car 를 추적하고, 두 객체가 유효하게 갱신될 때만 주차 시작 가능 상태와 목적 지점을 계산해야 한다.
-- Interface:
+#### 기능 요구사항
 
-  | Direction | Topic | Type |
-  | :--- | :--- | :--- |
-  | Input | `/detection_poses` | `geometry_msgs/PoseArray` |
-  | Output | `/parking_viz` | `visualization_msgs/MarkerArray` |
-  | Output | `/roi_marker` | `visualization_msgs/Marker` |
+| 기능 | 설명 | Input | Output |
+| :--- | :--- | :--- | :--- |
+| parked car 추적 및 주차 시작 판단 | 두 parked car 를 추적하고, 두 객체가 유효할 때만 주차 시작 가능 상태와 목적 지점을 계산해야 한다 | `/detection_poses` | `/parking_viz`, `/roi_marker` |
+| 주차 FSM 전이 및 path 생성 | 8개 상태를 관리하고, 주차 시작 조건이 만족되면 `/stanley_path` 를 생성해야 한다 | `/parking_lane_steer`, `/parking_stanley_steer` | `/stanley_path`, `/debug_overlay_text` |
+| 조향/종방향 명령 출력 및 serial freeze | 현재 상태에 맞는 조향 소스를 선택해 명령을 publish하고, serial 이상 시 0 명령으로 안전 정지해야 한다 | `/rosserial_check` | `/des_steer`, `/motor_cmd_long` |
 
-- Verification:
-  parked car 가 포함된 rosbag replay 또는 실시간 입력에서 `/parking_viz` 와 `/roi_marker` 가 생성되고, 두 객체가 모두 유효한 구간에서 주차 목적 지점이 안정적으로 갱신되는지 확인한다.
-- Constraint / Fault Note:
-  detection 결과가 끊기거나 두 차량 중 하나라도 추적이 불안정하면 Stanley path 생성과 상태 전이가 지연될 수 있다.
-
-주차 FSM 전이 및 path 생성
-- Description:
-  메인 노드는 `lane_driving`, `full_left_steer`, `pause_after_left`, `stanley`, `stop`, `pull_out1`, `pull_out2`, `finishing` 상태를 관리하고, 주차 시작 조건이 만족되면 `/stanley_path` 를 생성해야 한다.
-- Interface:
-
-  | Direction | Topic | Type |
-  | :--- | :--- | :--- |
-  | Input | `/parking_lane_steer` | `std_msgs/Int16` |
-  | Input | `/parking_stanley_steer` | `std_msgs/Int16` |
-  | Output | `/stanley_path` | `nav_msgs/Path` |
-  | Output | `/debug_overlay_text` | `jsk_rviz_plugins/OverlayText` |
-
-- Verification:
-  주차 시나리오 입력에서 상태 전이에 따라 `/stanley_path` 가 생성되고, RViz 또는 overlay text 로 현재 상태 변화를 확인할 수 있는지 점검한다.
-- Constraint / Fault Note:
-  `full_left_steer`, `pull_out1`, `pull_out2`, `finishing` 구간은 open-loop timing 기반이므로 차량 속도나 노면 조건 변화에 민감하다.
-
-조향/종방향 명령 출력 및 serial freeze
-- Description:
-  `parking.py` 는 lane steer, Stanley steer, 고정 조향 명령 중 현재 상태에 맞는 소스를 선택해 `/des_steer` 와 `/motor_cmd_long` 을 publish 해야 하며, serial 이상 시 freeze 조건에서 0 명령으로 안전 정지해야 한다.
-- Interface:
-
-  | Direction | Topic | Type |
-  | :--- | :--- | :--- |
-  | Input | `/rosserial_check` | `std_msgs/Int16` |
-  | Output | `/des_steer` | `std_msgs/Int16` |
-  | Output | `/motor_cmd_long` | `std_msgs/Int16` |
-
-- Verification:
-  parking mode 실행 중 `/des_steer` 와 `/motor_cmd_long` 이 상태에 따라 갱신되는지 확인하고, `/rosserial_check` 비정상 조건에서 0 명령이 유지되는지 확인한다.
-- Constraint / Fault Note:
-  현재 종방향은 dedicated longitudinal controller가 아니라 planner 내부의 상태 기반 고정 PWM 명령이다.
+#### 비기능 요구사항
 
 ### `stanley.py` node
 
-주차 path 기반 조향각 계산
-- Description:
-  `stanley.py` 는 `/stanley_path` 를 입력으로 받아 lateral error 와 heading error 기반 Stanley steering 을 계산하고 `/parking_stanley_steer` 를 publish 해야 한다.
-- Interface:
+#### 기능 요구사항
 
-  | Direction | Topic | Type |
-  | :--- | :--- | :--- |
-  | Input | `/stanley_path` | `nav_msgs/Path` |
-  | Output | `/parking_stanley_steer` | `std_msgs/Int16` |
-  | Output | `/stanley_debug` | `visualization_msgs/Marker` |
-  | Output | `/stanley_debug_text` | `jsk_rviz_plugins/OverlayText` |
+| 기능 | 설명 | Input | Output |
+| :--- | :--- | :--- | :--- |
+| 주차 path 기반 조향각 계산 | `/stanley_path` 를 받아 lateral/heading error 기반 Stanley steering 을 계산하고 publish 해야 한다 | `/stanley_path` | `/parking_stanley_steer`, `/stanley_debug`, `/stanley_debug_text` |
 
-- Verification:
-  유효한 `/stanley_path` 입력 시 `/parking_stanley_steer` 가 생성되고, 빈 path 입력 시 조향 명령이 0으로 떨어지며 marker가 정리되는지 확인한다.
-- Constraint / Fault Note:
-  현재 Stanley 구현은 고정 상수 `K`, `L`, `V`, `k_h`, `k_l` 를 사용하며, motion yaw 를 후진 기준으로 가정한다.
+#### 비기능 요구사항
 
 ## Verification Scenario
 

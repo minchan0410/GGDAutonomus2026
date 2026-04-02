@@ -41,35 +41,15 @@
 
 ### `detection` node
 
-입력 전처리
-- Description:
-  `detection` 노드는 `/scan`을 입력으로 수신하고, 설정된 ROI 내부의 유효 point만 detection 처리에 사용한다.
-- Interface:
-  Input=`/scan` (`sensor_msgs/LaserScan`), Output=`/clustered_cloud` (`sensor_msgs/PointCloud2`)
-- Verification:
-  `/scan`이 포함된 bag을 replay 후 `/clustered_cloud`가 생성되는지 확인한다.
-- Constraint / Fault Note:
-  lidar 입력 누락 및 ROI 파라미터 설정 오류로 Object가 생성되지 않을 수 있다.
+#### 기능 요구사항
 
-parked car 후보 검출 및 추적
-- Description:
-  `detection` 노드는 유효 point들로부터 parked car 후보를 생성하고, 연속 프레임에서 동일 객체에 대한 tracking을 유지해야 한다.
-- Interface:
-  Input=`/scan`, Output=`/detection_markers`, `/detection_poses`
-- Verification:
-  `kkd_parking1~3.bag` replay 후 parked car가 tracking 되는지 확인한다.
-- Constraint / Fault Note:
-  장시간 point 손실 시 miss detection 또는 ID 변경이 발생할 수 있다.
+| 기능 | 설명 | Input | Output |
+| :--- | :--- | :--- | :--- |
+| 입력 전처리 | ROI 내부의 유효 point만 detection 처리에 사용해야 한다 | `/scan` | `/clustered_cloud` |
+| parked car 후보 검출 및 추적 | 유효 point로부터 parked car 후보를 생성하고, 연속 프레임에서 동일 객체 tracking을 유지해야 한다 | `/scan` | `/detection_poses`, `/detection_markers` |
+| 결과 publish 및 입력 이상 대응 | parked car 중심 좌표를 publish하고, 유효 입력이 없을 때 prediction 결과를 1초 이상 유지하지 않아야 한다 | - | `/detection_poses`, `/detection_markers`, `/detection_poses_viz` |
 
-결과 publish 및 입력 이상 대응
-- Description:
-  `detection` 노드는 검출된 parked car 중심 좌표를 `/detection_poses`로 publish하고, 유효 입력이 없을 때 prediction 결과를 1초 이상 유지하지 않는다.
-- Interface:
-  Output=`/detection_poses`, `/detection_markers`, `/detection_poses_viz`
-- Verification:
-  `kkd_parking1~3.bag` replay 후 prediction 결과가 1초 이상 남지 않는지 확인한다.
-- Constraint / Fault Note:
-  짧은 입력 공백에서는 tracking prediction이 일시적으로 유지될 수 있다.
+#### 비기능 요구사항
 
 ## Verification Scenario
 

@@ -46,39 +46,19 @@
   - 현재 `lane.launch`에서 실행되는 메인 lane detection 노드다.
   - `/lane_steer`, `/lane_lines_px`, `/lane_target_px`, `/crossline`을 중심 인터페이스로 publish한다.
 
-## Requirements Summary
+## Requirements
 
 ### `run2.py` node
 
-입력 이미지 전처리 및 차선 후보 추출
-- Description:
-  `run2.py`는 `/cam1/usb_cam/image_raw`를 입력으로 수신하고, ROI 내부의 유효 edge와 line 후보만 후속 lane detection 처리에 사용해야 한다.
-- Interface:
-  Input=`/cam1/usb_cam/image_raw` (`sensor_msgs/Image`), Output=`/lane_lines_px` (`std_msgs/Int32MultiArray`)
-- Verification:
-  `/cam1/usb_cam/image_raw`가 포함되며, 실제로 트랙에서 주행하고 있는 bag을 사용하여 `/lane_lines_px`가 생성되는지 확인한다.
-- Constraint / Fault Note:
-  카메라 입력 누락, ROI 부적합, CUDA 미지원 환경에서는 차선 후보가 생성되지 않거나 노드가 종료될 수 있다.
+#### 기능 요구사항
 
-주행용 steering 및 target 산출
-- Description:
-  `run2.py`는 좌우 차선 후보로부터 midpoint를 계산하고, 이를 기반으로 주행에 사용할 steering 값을 `/lane_steer`로 publish해야 한다.
-- Interface:
-  Output=`/lane_steer` (`std_msgs/Int16`), `/lane_target_px` (`geometry_msgs/PointStamped`)
-- Verification:
-  전방 카메라 rosbag replay 또는 실시간 입력에서 `/lane_steer`와 `/lane_target_px`가 연속적으로 갱신되는지 확인한다.
-- Constraint / Fault Note:
-  강한 조도 변화, 차선 가림 시 midpoint 추정이 흔들릴 수 있다.
+| 기능 | 설명 | Input | Output |
+| :--- | :--- | :--- | :--- |
+| 입력 이미지 전처리 및 차선 후보 추출 | ROI 내부의 유효 edge와 line 후보만 detection에 사용해야 한다 | `/cam1/usb_cam/image_raw` | `/lane_lines_px` |
+| 주행용 steering 및 target 산출 | 좌우 차선 후보로부터 midpoint를 계산하고 steering 값을 publish해야 한다 | - | `/lane_steer`, `/lane_target_px` |
+| crossline 상태 제공 | crossline 상태를 publish해야 하며, 이미지 입력이 없을 때 새 결과를 계속 생성하지 않아야 한다 | - | `/crossline` |
 
-결과 publish 및 crossline 상태 제공
-- Description:
-  `run2.py`는 차선 detection 결과와 함께 crossline 상태를 `/crossline`으로 publish해야 하며, 이미지 입력이 없을 때 새 결과를 정상 입력처럼 계속 생성하지 않아야 한다.
-- Interface:
-  Output=`/crossline` (`std_msgs/Int16`), `/lane_steer`, `/lane_lines_px`
-- Verification:
-  crossline이 포함된 전방 카메라 rosbag 또는 실시간 장면에서 `/crossline` 상태 변화를 확인하고, 입력 공백 시 새 output이 계속 갱신되지 않는지 확인한다.
-- Constraint / Fault Note:
-  crossline 판단은 현재 코드 내부 threshold와 queue 기반이므로 노면 밝기, 노이즈, 마스킹 조건에 따라 false detection 또는 miss detection이 발생할 수 있다.
+#### 비기능 요구사항
 
 ## Verification Scenario
 
