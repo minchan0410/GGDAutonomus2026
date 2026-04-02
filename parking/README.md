@@ -68,9 +68,9 @@
 
 ## 요구사항
 
-**대상 노드:** `parking.py`
+### 대상 노드: `parking.py`
 
-### 기능 요구사항
+#### 기능 요구사항
 
 | 기능 | 설명 | Input | Output |
 | :--- | :--- | :--- | :--- |
@@ -78,7 +78,7 @@
 | 주차 FSM 전이 및 path 생성 | 8개 상태를 관리하고, 주차 시작 조건이 만족되면 `/stanley_path` 를 생성해야 한다 | `/parking_lane_steer`, `/parking_stanley_steer` | `/stanley_path`, `/debug_overlay_text` |
 | 조향/종방향 명령 출력 및 serial freeze | 현재 상태에 맞는 조향 소스를 선택해 명령을 publish하고, serial 이상 시 0 명령으로 안전 정지해야 한다 | `/rosserial_check` | `/des_steer`, `/motor_cmd_long` |
 
-### 비기능 요구사항
+#### 비기능 요구사항
 
 | 항목 | 설명 | 기준 |
 | :--- | :--- | :--- |
@@ -86,15 +86,15 @@
 | CPU 사용률 | 주차 planner 는 `laser_detector`, `stanley.py`, RViz와 병행 실행 가능하도록 시스템 자원을 과도하게 점유하지 않아야 한다. | CPU 사용률 `30%` 이내 |
 | 종방향 PWM 출력 제한 | `parking.py` 가 publish 하는 종방향 motor command 는 하드웨어 허용 범위를 넘지 않도록 제한되어야 한다. | `/motor_cmd_long` 출력 범위 `-255` ~ `255` |
 
-**대상 노드:** `stanley.py`
+### 대상 노드: `stanley.py`
 
-### 기능 요구사항
+#### 기능 요구사항
 
 | 기능 | 설명 | Input | Output |
 | :--- | :--- | :--- | :--- |
 | 주차 path 기반 조향각 계산 | `/stanley_path` 를 받아 lateral/heading error 기반 Stanley steering 을 계산하고 publish 해야 한다 | `/stanley_path` | `/parking_stanley_steer`, `/stanley_debug`, `/stanley_debug_text` |
 
-### 비기능 요구사항
+#### 비기능 요구사항
 
 | 항목 | 설명 | 기준 |
 | :--- | :--- | :--- |

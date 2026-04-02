@@ -94,24 +94,24 @@
 
 ## 요구사항
 
-**대상 노드:** `pre_planner.py`
+### 대상 노드: `pre_planner.py`
 
-### 기능 요구사항
+#### 기능 요구사항
 
 | 기능 | 설명 | Input | Output |
 | :--- | :--- | :--- | :--- |
 | PRE mode 조향/속도 명령 생성 | `DEFAULT` / `PRE` 모드를 전환하고, `PRE` 모드에서 serial 이 정상일 때 lane steer 기반으로 `/des_steer` 와 `/motor_cmd_long` 을 publish 해야 한다 | `/lane_steer`, `/rosserial_check` | `/des_steer`, `/motor_cmd_long` |
 
-### 비기능 요구사항
+#### 비기능 요구사항
 
 | 항목 | 설명 | 기준 |
 | :--- | :--- | :--- |
 | 처리 주기 | `pre_planner.py` 는 PRE mode 조향/속도 명령을 지연 없이 생성할 수 있도록 제어 루프 주기를 유지해야 한다. | 제어 루프 주기 `20 Hz`, 1 loop 처리 시간 `50 ms` 이내 |
 | CPU 사용률 | PRE planner 는 다른 주행 노드와 병행 실행 가능하도록 시스템 자원을 과도하게 점유하지 않아야 한다. | CPU 사용률 `30%` 이내 |
 
-**대상 노드:** `final_planner.py`
+### 대상 노드: `final_planner.py`
 
-### 기능 요구사항
+#### 기능 요구사항
 
 | 기능 | 설명 | Input | Output |
 | :--- | :--- | :--- | :--- |
@@ -119,7 +119,7 @@
 | 차선 변경 완료 판단 및 debug publish | `/lane_lines_px` 를 이용해 좌우 차선의 x 변화량과 rolling distance 를 계산하고, 차선 변경 완료 여부와 관련 debug topic 을 publish 해야 한다 | `/lane_lines_px` | `lane_change/*`, `/final_planner/lane_change_reason`, `/final_planner/yolo_crash_point` |
 | serial freeze 및 안전 동작 | `FINAL` 모드에서 serial 상태가 끊기면 planner 는 상태를 유지한 채 actuation update 를 멈추고 freeze 상태로 들어가야 하며, serial 복구 후 다시 resume 해야 한다 | `/rosserial_check` | `/final_planner/state`, `/final_planner/yolo_crash`, `/final_planner/lane_change_reason` |
 
-### 비기능 요구사항
+#### 비기능 요구사항
 
 | 항목 | 설명 | 기준 |
 | :--- | :--- | :--- |
@@ -130,29 +130,29 @@
 - `lane_change_checker.py` 를 동시에 실행하면 동일한 `lane_change/*` 계열 topic publisher 가 중복될 수 있다.
 - freeze 동작은 low-level actuator 자체가 아니라 planner 측 command update 를 멈추는 방식이다.
 
-**대상 노드:** `final_planner_rviz.py`
+### 대상 노드: `final_planner_rviz.py`
 
-### 기능 요구사항
+#### 기능 요구사항
 
 | 기능 | 설명 | Input | Output |
 | :--- | :--- | :--- | :--- |
 | planner 상태 HUD 및 ROI 시각화 | planner 상태 topic 을 받아 ROI marker, lane-change 중 obstacle latch, HUD overlay 를 RViz 에 표시해야 한다 | `/final_planner/state`, `/final_planner/yolo_crash`, `/final_planner/lane_change_reason`, `/final_planner/yolo_crash_point` | `/final_planner/markers`, `/final_planner/hud` |
 
-### 비기능 요구사항
+#### 비기능 요구사항
 
 | 항목 | 설명 | 기준 |
 | :--- | :--- | :--- |
 | CPU 사용률 | RViz 시각화 노드는 planner 동작에 영향을 주지 않도록 시스템 자원 사용을 최소화해야 한다. | CPU 사용량 최소화 |
 
-**대상 노드:** `lane_bev_rviz.py`
+### 대상 노드: `lane_bev_rviz.py`
 
-### 기능 요구사항
+#### 기능 요구사항
 
 | 기능 | 설명 | Input | Output |
 | :--- | :--- | :--- | :--- |
 | lane pixel 기반 BEV 생성 | `/lane_lines_px`, `/lane_target_px`, `/lane_steer` 를 받아 BEV OccupancyGrid 와 marker 를 생성해야 한다 | `/lane_lines_px`, `/lane_target_px`, `/lane_steer` | `/lane_bev/grid`, `/lane_bev/markers` |
 
-### 비기능 요구사항
+#### 비기능 요구사항
 
 | 항목 | 설명 | 기준 |
 | :--- | :--- | :--- |

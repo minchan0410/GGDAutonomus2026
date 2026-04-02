@@ -51,9 +51,9 @@ MINT : `lane_steer`
 
 ## 요구사항
 
-**대상 노드:** `lateral_lower_controller.py`
+### 대상 노드: `lateral_lower_controller.py`
 
-### 기능 요구사항
+#### 기능 요구사항
 
 | 기능 | 설명 | Input | Output |
 | :--- | :--- | :--- | :--- |
@@ -61,7 +61,7 @@ MINT : `lane_steer`
 | PID 기반 steering PWM 계산 및 publish | 20Hz loop에서 목표/현재 조향각 오차로 PID 출력을 계산하고 `/motor_cmd_steer` 를 publish 해야 한다 | `/des_steer`, `/potentiometer` | `/motor_cmd_steer`, `/des_steer_deg` |
 | 범위 이탈 시 안전 출력 제한 | 현재 조향각이 허용 범위를 벗어난 경우 `out_of_range()` 조건에 따라 `/motor_cmd_steer` 를 0으로 강제해야 한다 | - | `/motor_cmd_steer` |
 
-### 비기능 요구사항
+#### 비기능 요구사항
 
 | 항목 | 설명 | 기준 |
 | :--- | :--- | :--- |

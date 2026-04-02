@@ -39,9 +39,9 @@
 
 ## 요구사항
 
-**대상 노드:** `detection`
+### 대상 노드: `detection`
 
-### 기능 요구사항
+#### 기능 요구사항
 
 | 기능 | 설명 | Input | Output |
 | :--- | :--- | :--- | :--- |
@@ -49,7 +49,7 @@
 | parked car 후보 검출 및 추적 | 유효 point로부터 parked car 후보를 생성하고, 연속 프레임에서 동일 객체 tracking을 유지해야 한다 | `/scan` | `/detection_poses`, `/detection_markers` |
 | 결과 publish 및 입력 이상 대응 | parked car 중심 좌표를 publish하고, 유효 입력이 없을 때 prediction 결과를 1초 이상 유지하지 않아야 한다 | - | `/detection_poses`, `/detection_markers`, `/detection_poses_viz` |
 
-### 비기능 요구사항
+#### 비기능 요구사항
 
 | 항목 | 설명 | 기준 |
 | :--- | :--- | :--- |

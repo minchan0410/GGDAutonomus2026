@@ -52,16 +52,16 @@
 
 ## 요구사항
 
-**대상 노드:** `object_detection.py`, `object_projection.py`
+### 대상 노드: `object_detection.py`, `object_projection.py`
 
-### 기능 요구사항
+#### 기능 요구사항
 
 | 기능 | 설명 | Input | Output |
 | :--- | :--- | :--- | :--- |
 | 전방 차량 bbox 검출 및 publish | YOLO 결과 중 `car_class_name` 에 해당하는 객체만 선택해 publish 해야 한다 | `/cam1/usb_cam/image_raw` | `/car_detection` |
 | 차량 detection 결과의 지면 좌표 투영 | bbox 하단 중심을 카메라 파라미터 기반으로 지면에 투영하여 `/car_projected` 를 생성해야 한다 | `/car_detection` | `/car_projected`, `/car_projected_markers` |
 
-### 비기능 요구사항
+#### 비기능 요구사항
 
 | 항목 | 설명 | 기준 |
 | :--- | :--- | :--- |
@@ -69,15 +69,15 @@
 | CPU 사용률 | vehicle perception 파이프라인은 다른 주행 노드와 병행 실행 가능하도록 시스템 자원을 과도하게 점유하지 않아야 한다. | CPU 사용률 `40%` 이내 |
 | 출력 좌표계 일관성 | 지면 투영 결과는 planner가 바로 사용할 수 있도록 단일 기준 좌표계로 publish 되어야 한다. | `/car_projected`, `/car_projected_markers` 의 `frame_id` 는 `base_link` |
 
-**대상 노드:** `traffic_detection.py`
+### 대상 노드: `traffic_detection.py`
 
-### 기능 요구사항
+#### 기능 요구사항
 
 | 기능 | 설명 | Input | Output |
 | :--- | :--- | :--- | :--- |
 | 신호등 상태 분류 및 publish | ROI 내부 신호등 YOLO 결과를 분류하여 `/traffic` 상태값을 publish 해야 한다 | `/cam2/usb_cam/image_raw` | `/traffic`, `/traffic_overlay/image` |
 
-### 비기능 요구사항
+#### 비기능 요구사항
 
 | 항목 | 설명 | 기준 |
 | :--- | :--- | :--- |

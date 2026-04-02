@@ -48,9 +48,9 @@
 
 ## 요구사항
 
-**대상 노드:** `run2.py`
+### 대상 노드: `run2.py`
 
-### 기능 요구사항
+#### 기능 요구사항
 
 | 기능 | 설명 | Input | Output |
 | :--- | :--- | :--- | :--- |
@@ -58,7 +58,7 @@
 | 주행용 steering 및 target 산출 | 좌우 차선 후보로부터 midpoint를 계산하고 steering 값을 publish해야 한다 | - | `/lane_steer`, `/lane_target_px` |
 | crossline 상태 제공 | crossline 상태를 publish해야 하며, 이미지 입력이 없을 때 새 결과를 계속 생성하지 않아야 한다 | - | `/crossline` |
 
-### 비기능 요구사항
+#### 비기능 요구사항
 
 | 항목 | 설명 | 기준 |
 | :--- | :--- | :--- |
