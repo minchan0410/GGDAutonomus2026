@@ -34,7 +34,7 @@
   입력 : `laser_detector`, `lane_detector`, `support`, `stanley.py`
   출력 : `lateral_controller`, `arduino_motor_bridge`, RViz 및 debug 확인 환경
 
-## Interface Summary
+## 인터페이스
 
 | Direction | Topic | Type | Description | Used by |
 | :--- | :--- | :--- | :--- | :--- |
@@ -51,7 +51,7 @@
 | Output | `/stanley_debug` | `visualization_msgs/Marker` | Stanley debug marker | RViz |
 | Output | `/stanley_debug_text` | `jsk_rviz_plugins/OverlayText` | Stanley debug text | RViz |
 
-## Node Summary
+## Node
 
 - `parking.py`
   - `parking` 패키지의 메인 FSM planner 노드다.
@@ -66,11 +66,11 @@
   - 실험용 스크립트 성격의 테스트 노드다.
   - 현재 주차 메인 파이프라인에는 포함되지 않는다.
 
-## Requirements Summary
+## 요구사항
 
-### `parking.py` node
+**대상 노드:** `parking.py`
 
-#### 기능 요구사항
+### 기능 요구사항
 
 | 기능 | 설명 | Input | Output |
 | :--- | :--- | :--- | :--- |
@@ -78,19 +78,30 @@
 | 주차 FSM 전이 및 path 생성 | 8개 상태를 관리하고, 주차 시작 조건이 만족되면 `/stanley_path` 를 생성해야 한다 | `/parking_lane_steer`, `/parking_stanley_steer` | `/stanley_path`, `/debug_overlay_text` |
 | 조향/종방향 명령 출력 및 serial freeze | 현재 상태에 맞는 조향 소스를 선택해 명령을 publish하고, serial 이상 시 0 명령으로 안전 정지해야 한다 | `/rosserial_check` | `/des_steer`, `/motor_cmd_long` |
 
-#### 비기능 요구사항
+### 비기능 요구사항
 
-### `stanley.py` node
+| 항목 | 설명 | 기준 |
+| :--- | :--- | :--- |
+| 처리 주기 | `parking.py` 는 주차 FSM, parked car 추적, path 생성, 제어 명령 출력을 지연 없이 수행할 수 있도록 메인 루프 주기를 유지해야 한다. | 메인 루프 주기 `20 Hz`, 1 loop 처리 시간 `50 ms` 이내 |
+| CPU 사용률 | 주차 planner 는 `laser_detector`, `stanley.py`, RViz와 병행 실행 가능하도록 시스템 자원을 과도하게 점유하지 않아야 한다. | CPU 사용률 `30%` 이내 |
+| 종방향 PWM 출력 제한 | `parking.py` 가 publish 하는 종방향 motor command 는 하드웨어 허용 범위를 넘지 않도록 제한되어야 한다. | `/motor_cmd_long` 출력 범위 `-255` ~ `255` |
 
-#### 기능 요구사항
+**대상 노드:** `stanley.py`
+
+### 기능 요구사항
 
 | 기능 | 설명 | Input | Output |
 | :--- | :--- | :--- | :--- |
 | 주차 path 기반 조향각 계산 | `/stanley_path` 를 받아 lateral/heading error 기반 Stanley steering 을 계산하고 publish 해야 한다 | `/stanley_path` | `/parking_stanley_steer`, `/stanley_debug`, `/stanley_debug_text` |
 
-#### 비기능 요구사항
+### 비기능 요구사항
 
-## Verification Scenario
+| 항목 | 설명 | 기준 |
+| :--- | :--- | :--- |
+| 처리 주기 | `stanley.py` 는 `/stanley_path` 입력 갱신을 누락 없이 처리할 수 있도록 주차 경로 입력 주기를 따라가야 한다. | `/stanley_path` 입력 `20 Hz` 기준, 1 path 처리 시간 `50 ms` 이내 |
+| CPU 사용률 | Stanley steering 계산과 debug publish 는 다른 주행 노드와 병행 실행 가능하도록 시스템 자원을 과도하게 점유하지 않아야 한다. | CPU 사용률 `30%` 이내 |
+
+## 검증 bag
 
 - 실행 준비 / 확인 topic:
   parked car detection 과 `/parking_lane_steer` 가 들어오는 rosbag replay 또는 실차 환경 준비, 확인 topic 은 `/detection_poses`, `/stanley_path`, `/parking_stanley_steer`, `/des_steer`, `/motor_cmd_long`, `/parking_viz`, `/roi_marker`

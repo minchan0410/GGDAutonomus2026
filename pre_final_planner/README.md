@@ -56,7 +56,7 @@
   입력 : `lane_detector`, `object_detector`, `support`
   출력 : `lateral_controller`, `arduino_motor_bridge`, RViz 및 debug 확인 환경
 
-## Interface Summary
+## 인터페이스
 
 | Direction | Topic | Type | Description | Used by |
 | :--- | :--- | :--- | :--- | :--- |
@@ -79,7 +79,7 @@
 | Output | `/lane_bev/grid` | `nav_msgs/OccupancyGrid` | lane pixel 기반 BEV grid | RViz |
 | Output | `/lane_bev/markers` | `visualization_msgs/Marker` | lane BEV marker | RViz |
 
-## Node Summary
+## Node
 
 - `pre_planner.py`
   - keyboard 입력으로 `DEFAULT` / `PRE` 모드를 전환하는 단순 planner 노드다.
@@ -92,126 +92,74 @@
 - `lane_bev_rviz.py`
   - `lane_lines_px`, `lane_target_px`, `lane_steer` 를 받아 BEV grid와 marker를 생성하는 시각화 노드다.
 
-## Requirements Summary
+## 요구사항
 
-### `pre_planner.py` node
+**대상 노드:** `pre_planner.py`
 
-PRE mode 조향/속도 명령 생성
-- Description:
-  `pre_planner.py` 는 `/lane_steer` 와 `/rosserial_check` 를 받아 `DEFAULT` / `PRE` 모드를 전환하고, `PRE` 모드에서 serial 이 정상일 때 `/des_steer` 와 `/motor_cmd_long` 을 publish 해야 한다.
-- Interface:
+### 기능 요구사항
 
-  | Direction | Topic | Type |
-  | :--- | :--- | :--- |
-  | Input | `/lane_steer` | `std_msgs/Int16` |
-  | Input | `/rosserial_check` | `std_msgs/Int16` |
-  | Output | `/des_steer` | `std_msgs/Int16` |
-  | Output | `/motor_cmd_long` | `std_msgs/Int16` |
+| 기능 | 설명 | Input | Output |
+| :--- | :--- | :--- | :--- |
+| PRE mode 조향/속도 명령 생성 | `DEFAULT` / `PRE` 모드를 전환하고, `PRE` 모드에서 serial 이 정상일 때 lane steer 기반으로 `/des_steer` 와 `/motor_cmd_long` 을 publish 해야 한다 | `/lane_steer`, `/rosserial_check` | `/des_steer`, `/motor_cmd_long` |
 
-- Verification:
-  `pre_planner.launch` 실행 후 keyboard 로 `p` 전환 시 `/des_steer`, `/motor_cmd_long` 이 생성되는지 확인하고, serial 비정상 시 `DEFAULT` 로 복귀하는지 확인한다.
-- Constraint / Fault Note:
-  PRE 주행의 종방향은 고정 PWM 기반이며, dedicated longitudinal controller가 아니다.
+### 비기능 요구사항
 
-### `final_planner.py` node
+| 항목 | 설명 | 기준 |
+| :--- | :--- | :--- |
+| 처리 주기 | `pre_planner.py` 는 PRE mode 조향/속도 명령을 지연 없이 생성할 수 있도록 제어 루프 주기를 유지해야 한다. | 제어 루프 주기 `20 Hz`, 1 loop 처리 시간 `50 ms` 이내 |
+| CPU 사용률 | PRE planner 는 다른 주행 노드와 병행 실행 가능하도록 시스템 자원을 과도하게 점유하지 않아야 한다. | CPU 사용률 `30%` 이내 |
 
-FINAL state machine 기반 actuation output
-- Description:
-  `final_planner.py` 는 `/lane_steer`, `/car_projected`, `/traffic`, `/crossline`, `/rosserial_check` 등을 입력으로 받아 `start`, `lane_driving1`, `lane_change_to_left`, `lane_driving2`, `lane_change_to_right`, `crossline`, `traffic`, `case1`, `case2` 상태를 관리하고 `/des_steer`, `/motor_cmd_long` 을 publish 해야 한다.
-- Interface:
+**대상 노드:** `final_planner.py`
 
-  | Direction | Topic | Type |
-  | :--- | :--- | :--- |
-  | Input | `/lane_steer` | `std_msgs/Int16` |
-  | Input | `/car_projected` | `geometry_msgs/PoseArray` |
-  | Input | `/traffic` | `std_msgs/Int16` |
-  | Input | `/crossline` | `std_msgs/Int16` |
-  | Input | `/rosserial_check` | `std_msgs/Int16` |
-  | Output | `/des_steer` | `std_msgs/Int16` |
-  | Output | `/motor_cmd_long` | `std_msgs/Int16` |
-  | Output | `/final_planner/state` | `std_msgs/String` |
+### 기능 요구사항
 
-- Verification:
-  `final_planner.launch` 실행 후 planner 입력 topic 이 들어올 때 `/final_planner/state` 와 `/des_steer`, `/motor_cmd_long` 이 상태에 맞게 갱신되는지 확인한다.
-- Constraint / Fault Note:
-  현재 종방향은 상태 기반 고정 PWM 명령이고, open-loop 성격이 강하다.
+| 기능 | 설명 | Input | Output |
+| :--- | :--- | :--- | :--- |
+| FINAL state machine 기반 제어 출력 | `start`, `lane_driving1`, `lane_change_to_left`, `lane_driving2`, `lane_change_to_right`, `crossline`, `traffic`, `case1`, `case2` 상태를 관리하고 상태에 맞는 `/des_steer`, `/motor_cmd_long`, `/final_planner/state` 를 publish 해야 한다 | `/lane_steer`, `/car_projected`, `/traffic`, `/crossline`, `/rosserial_check` | `/des_steer`, `/motor_cmd_long`, `/final_planner/state` |
+| 차선 변경 완료 판단 및 debug publish | `/lane_lines_px` 를 이용해 좌우 차선의 x 변화량과 rolling distance 를 계산하고, 차선 변경 완료 여부와 관련 debug topic 을 publish 해야 한다 | `/lane_lines_px` | `lane_change/*`, `/final_planner/lane_change_reason`, `/final_planner/yolo_crash_point` |
+| serial freeze 및 안전 동작 | `FINAL` 모드에서 serial 상태가 끊기면 planner 는 상태를 유지한 채 actuation update 를 멈추고 freeze 상태로 들어가야 하며, serial 복구 후 다시 resume 해야 한다 | `/rosserial_check` | `/final_planner/state`, `/final_planner/yolo_crash`, `/final_planner/lane_change_reason` |
 
-차선 변경 완료 판단 및 debug publish
-- Description:
-  메인 노드는 `/lane_lines_px` 를 이용해 좌우 차선의 x 변화량과 rolling distance 를 계산하고, 차선 변경 완료 여부와 debug topic 을 publish 해야 한다.
-- Interface:
+### 비기능 요구사항
 
-  | Direction | Topic | Type |
-  | :--- | :--- | :--- |
-  | Input | `/lane_lines_px` | `std_msgs/Int32MultiArray` |
-  | Output | `lane_change/*` | multiple debug topics |
-  | Output | `/final_planner/lane_change_reason` | `std_msgs/String` |
-  | Output | `/final_planner/yolo_crash_point` | `geometry_msgs/PointStamped` |
+| 항목 | 설명 | 기준 |
+| :--- | :--- | :--- |
+| 처리 주기 | `final_planner.py` 는 상태 판단, 차선 변경 검사, actuation 출력이 지연 없이 수행되도록 planner loop 주기를 유지해야 한다. | planner loop 주기 `20 Hz`, 1 loop 처리 시간 `50 ms` 이내 |
+| CPU 사용률 | FINAL planner 는 perception, controller, RViz와 병행 실행 가능하도록 시스템 자원을 과도하게 점유하지 않아야 한다. | CPU 사용률 `30%` 이내 |
 
-- Verification:
-  lane change 가 포함된 입력에서 `lane_change/left/*`, `lane_change/right/*`, completion flag, `/final_planner/lane_change_reason` 이 갱신되는지 확인한다.
-- Constraint / Fault Note:
-  `lane_change_checker.py` 를 동시에 실행하면 동일한 `lane_change/*` 계열 topic publisher 가 중복될 수 있다.
+- 현재 종방향은 상태 기반 고정 PWM 명령이고, open-loop 성격이 강하다.
+- `lane_change_checker.py` 를 동시에 실행하면 동일한 `lane_change/*` 계열 topic publisher 가 중복될 수 있다.
+- freeze 동작은 low-level actuator 자체가 아니라 planner 측 command update 를 멈추는 방식이다.
 
-serial freeze 및 안전 동작
-- Description:
-  `FINAL` 모드에서 serial 상태가 끊기면 planner 는 상태를 유지한 채 actuation update 를 멈추고 freeze 상태로 들어가야 하며, serial 복구 후 다시 resume 해야 한다.
-- Interface:
+**대상 노드:** `final_planner_rviz.py`
 
-  | Direction | Topic | Type |
-  | :--- | :--- | :--- |
-  | Input | `/rosserial_check` | `std_msgs/Int16` |
-  | Output | `/final_planner/state` | `std_msgs/String` |
-  | Output | `/final_planner/yolo_crash` | `std_msgs/Bool` |
-  | Output | `/final_planner/lane_change_reason` | `std_msgs/String` |
+### 기능 요구사항
 
-- Verification:
-  serial error 상황을 주입했을 때 freeze 관련 log 와 상태 publish 가 유지되고, 복구 후 resume 되는지 확인한다.
-- Constraint / Fault Note:
-  freeze 동작은 low-level actuator 자체가 아니라 planner 측 command update 를 멈추는 방식이다.
+| 기능 | 설명 | Input | Output |
+| :--- | :--- | :--- | :--- |
+| planner 상태 HUD 및 ROI 시각화 | planner 상태 topic 을 받아 ROI marker, lane-change 중 obstacle latch, HUD overlay 를 RViz 에 표시해야 한다 | `/final_planner/state`, `/final_planner/yolo_crash`, `/final_planner/lane_change_reason`, `/final_planner/yolo_crash_point` | `/final_planner/markers`, `/final_planner/hud` |
 
-### `final_planner_rviz.py` node
+### 비기능 요구사항
 
-planner 상태 HUD 및 ROI 시각화
-- Description:
-  `final_planner_rviz.py` 는 planner 상태 topic 을 받아 ROI marker, lane-change 중 obstacle latch, HUD overlay 를 RViz 에 표시해야 한다.
-- Interface:
+| 항목 | 설명 | 기준 |
+| :--- | :--- | :--- |
+| CPU 사용률 | RViz 시각화 노드는 planner 동작에 영향을 주지 않도록 시스템 자원 사용을 최소화해야 한다. | CPU 사용량 최소화 |
 
-  | Direction | Topic | Type |
-  | :--- | :--- | :--- |
-  | Input | `/final_planner/state` | `std_msgs/String` |
-  | Input | `/final_planner/yolo_crash` | `std_msgs/Bool` |
-  | Input | `/final_planner/lane_change_reason` | `std_msgs/String` |
-  | Input | `/final_planner/yolo_crash_point` | `geometry_msgs/PointStamped` |
-  | Output | `/final_planner/markers` | `visualization_msgs/MarkerArray` |
-  | Output | `/final_planner/hud` | `jsk_rviz_plugins/OverlayText` |
+**대상 노드:** `lane_bev_rviz.py`
 
-- Verification:
-  FINAL 실행 중 RViz 에서 ROI marker, HUD text, 최근접 obstacle point 표시를 확인한다.
-- Constraint / Fault Note:
-  본 노드는 planner 상태를 시각화할 뿐 planner decision 자체에는 관여하지 않는다.
+### 기능 요구사항
 
-### `lane_bev_rviz.py` node
+| 기능 | 설명 | Input | Output |
+| :--- | :--- | :--- | :--- |
+| lane pixel 기반 BEV 생성 | `/lane_lines_px`, `/lane_target_px`, `/lane_steer` 를 받아 BEV OccupancyGrid 와 marker 를 생성해야 한다 | `/lane_lines_px`, `/lane_target_px`, `/lane_steer` | `/lane_bev/grid`, `/lane_bev/markers` |
 
-lane pixel 기반 BEV 생성
-- Description:
-  `lane_bev_rviz.py` 는 `/lane_lines_px`, `/lane_target_px`, `/lane_steer` 를 받아 BEV OccupancyGrid 와 marker 를 생성해야 한다.
-- Interface:
+### 비기능 요구사항
 
-  | Direction | Topic | Type |
-  | :--- | :--- | :--- |
-  | Input | `/lane_lines_px` | `std_msgs/Int32MultiArray` |
-  | Input | `/lane_target_px` | `geometry_msgs/PointStamped` |
-  | Input | `/lane_steer` | `std_msgs/Int16` |
-  | Output | `/lane_bev/grid` | `nav_msgs/OccupancyGrid` |
-  | Output | `/lane_bev/markers` | `visualization_msgs/Marker` |
+| 항목 | 설명 | 기준 |
+| :--- | :--- | :--- |
+| CPU 사용률 | BEV 시각화 노드는 planner 동작에 영향을 주지 않도록 시스템 자원 사용을 최소화해야 한다. | CPU 사용량 최소화 |
 
-- Verification:
-  lane input 이 존재하는 bag 또는 실시간 입력에서 `/lane_bev/grid` 와 `/lane_bev/markers` 가 생성되는지 확인한다.
-- Constraint / Fault Note:
-  카메라 intrinsics / extrinsics 설정값이 틀리면 BEV 위치가 실제 차량 좌표와 어긋날 수 있다.
 
-## Verification Scenario
+## 검증 bag
 
 - 실행 준비 / 확인 topic:
   lane, object, traffic, serial 입력이 들어오는 rosbag replay 또는 실차 환경 준비, 확인 topic 은 `/des_steer`, `/motor_cmd_long`, `/final_planner/state`, `/final_planner/hud`, `/lane_bev/grid`

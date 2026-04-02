@@ -26,7 +26,7 @@
   최종 주차 경로 생성, 주차 상태 판단, 차량 제어
 - 상위/하위 관계:
   입력 : `rplidar_ros` 패키지, 출력 : `parking` 패키지 
-## Interface Summary
+## 인터페이스
 
 | Direction | Topic | Type | Description | Used by |
 | :--- | :--- | :--- | :--- | :--- |
@@ -37,11 +37,11 @@
 | Output | `/detection_poses_viz` | `geometry_msgs/PoseArray` | visualization용 중심 좌표 | RViz |
 
 
-## Requirements Summary
+## 요구사항
 
-### `detection` node
+**대상 노드:** `detection`
 
-#### 기능 요구사항
+### 기능 요구사항
 
 | 기능 | 설명 | Input | Output |
 | :--- | :--- | :--- | :--- |
@@ -49,9 +49,14 @@
 | parked car 후보 검출 및 추적 | 유효 point로부터 parked car 후보를 생성하고, 연속 프레임에서 동일 객체 tracking을 유지해야 한다 | `/scan` | `/detection_poses`, `/detection_markers` |
 | 결과 publish 및 입력 이상 대응 | parked car 중심 좌표를 publish하고, 유효 입력이 없을 때 prediction 결과를 1초 이상 유지하지 않아야 한다 | - | `/detection_poses`, `/detection_markers`, `/detection_poses_viz` |
 
-#### 비기능 요구사항
+### 비기능 요구사항
 
-## Verification Scenario
+| 항목 | 설명 | 기준 |
+| :--- | :--- | :--- |
+| 처리 주기 | `detection` 노드는 `/scan`의 7 Hz 입력을 따라갈 수 있도록 프레임당 처리 속도를 일정 시간 이하로 유지해야 한다. | 1 loop 처리 시간 `143 ms` 이내 |
+| CPU 사용률 | LiDAR 기반 parked car 검출 및 추적 처리 중 시스템 자원을 과도하게 점유하지 않아야 하며, `parking` 및 RViz와 병행 실행 가능한 수준을 유지해야 한다. | CPU 사용률 `20%` 이내 |
+
+## 검증 bag
 
 - 실행 준비:
   `/scan`이 포함된 rosbag replay
