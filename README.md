@@ -9,7 +9,7 @@
 <br>
 
 
-| Name | developement Role (package unit) |
+| Name | developement Role (package..) |
 | :--- | :--- |
 | `변지훈` | `Hardware Setting` / `lower_controller` / `pre_final_planner` / `object_detector` |
 | `한민규` |  `Team leader` /  `Paper Works`  |
@@ -18,22 +18,6 @@
 | `전희중` | `lane_detection` / `pre_final_planner` |
 
 <br>
-
-## **Requirements Snapshot**
-
-- system requirements:
-  차량 전체가 해야 할 일을 간단히 정리
-- interface requirements:
-  패키지 간 topic / message 약속 정리
-- unit requirements:
-  현재는 `laser_detector`만 먼저 작성
-- verification:
-  각 요구사항은 bag replay 기준으로 확인
-
-- [docs/requirements/system_requirements.md](docs/requirements/system_requirements.md)
-- [docs/requirements/interface_requirements.md](docs/requirements/interface_requirements.md)
-- [docs/requirements/units/laser_detector.md](docs/requirements/units/laser_detector.md)
-- [docs/test/bag_catalog.md](docs/test/bag_catalog.md)
 
 ## **Hardware Info** 
 
