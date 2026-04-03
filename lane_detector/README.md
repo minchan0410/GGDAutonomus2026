@@ -29,7 +29,7 @@
 - 상위/하위 관계:
   입력 : `usb_cam` 패키지, 출력 : `pre_final_planner` 패키지의 planner 및 visualization 노드에서 사용.
 
-## Interface Summary
+## 인터페이스
 
 | Direction | Topic | Type | Description | Used by |
 | :--- | :--- | :--- | :--- | :--- |
@@ -40,15 +40,15 @@
 | Output | `/crossline` | `std_msgs/Int16` | 0 : 미검출, 1 : 검출 | `pre_final_planner` |
 
 
-## Node Summary
+## Node
 
 - `run2.py`
   - 현재 `lane.launch`에서 실행되는 메인 lane detection 노드다.
   - `/lane_steer`, `/lane_lines_px`, `/lane_target_px`, `/crossline`을 중심 인터페이스로 publish한다.
 
-## Requirements
+## 요구사항
 
-### `run2.py` node
+### 대상 노드: `run2.py`
 
 #### 기능 요구사항
 
@@ -60,7 +60,12 @@
 
 #### 비기능 요구사항
 
-## Verification Scenario
+| 항목 | 설명 | 기준 |
+| :--- | :--- | :--- |
+| 처리 주기 | `run2.py`는 `/cam1/usb_cam/image_raw`의 30 Hz 입력을 따라갈 수 있도록 프레임당 처리 속도를 일정 시간 이하로 유지해야 한다. | 1 loop 처리 시간 `30 ms` 이내 |
+| CPU 사용률 | 차선 검출 처리 중 시스템 자원을 과도하게 점유하지 않아야 하며, RViz와 Object_detector의 시스템 자원 필요량을 고려해야 한다. | CPU 사용률 `30%` 이내 |
+
+## 검증 bag
 
 - 실행 준비:
   전방 카메라 실시간 입력 또는 `/cam1/usb_cam/image_raw`가 포함된 rosbag replay

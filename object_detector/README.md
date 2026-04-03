@@ -25,7 +25,7 @@
   입력 : `usb_cam`
   출력 : `pre_final_planner`, RViz 및 debug 확인 환경
 
-## Interface Summary
+## 인터페이스
 
 | Direction | Topic | Type | Description | Used by |
 | :--- | :--- | :--- | :--- | :--- |
@@ -38,7 +38,7 @@
 | Output | `/yolo_overlay/image` | `sensor_msgs/Image` | 차량 detection overlay image | RViz / debug |
 | Output | `/traffic_overlay/image` | `sensor_msgs/Image` | 신호 detection overlay image | RViz / debug |
 
-## Node Summary
+## Node
 
 - `object_detection.py`
   - `object_detector.launch`에서 실행되는 차량 검출 노드다.
@@ -50,29 +50,26 @@
   - 신호등 ROI 내부 YOLO 결과를 이용해 `/traffic` 상태를 publish 하는 노드다.
   - overlay를 통해 현재 프레임의 박스와 상태를 함께 표시한다.
 
-## Requirements Summary
+## 요구사항
 
-### `object_detection.py` node
+### 대상 노드: `object_detection.py`, `object_projection.py`
 
 #### 기능 요구사항
 
 | 기능 | 설명 | Input | Output |
 | :--- | :--- | :--- | :--- |
 | 전방 차량 bbox 검출 및 publish | YOLO 결과 중 `car_class_name` 에 해당하는 객체만 선택해 publish 해야 한다 | `/cam1/usb_cam/image_raw` | `/car_detection` |
-
-#### 비기능 요구사항
-
-### `object_projection.py` node
-
-#### 기능 요구사항
-
-| 기능 | 설명 | Input | Output |
-| :--- | :--- | :--- | :--- |
 | 차량 detection 결과의 지면 좌표 투영 | bbox 하단 중심을 카메라 파라미터 기반으로 지면에 투영하여 `/car_projected` 를 생성해야 한다 | `/car_detection` | `/car_projected`, `/car_projected_markers` |
 
 #### 비기능 요구사항
 
-### `traffic_detection.py` node
+| 항목 | 설명 | 기준 |
+| :--- | :--- | :--- |
+| 처리 주기 | `object_detection.py` 와 `object_projection.py` 는 `/cam1/usb_cam/image_raw` 입력을 누락 없이 처리할 수 있도록 전방 카메라 입력 주기를 따라가야 한다. | `/cam1/usb_cam/image_raw` 입력 `30 Hz`, 1 frame 처리 시간 `33 ms` 이내 |
+| CPU 사용률 | vehicle perception 파이프라인은 다른 주행 노드와 병행 실행 가능하도록 시스템 자원을 과도하게 점유하지 않아야 한다. | CPU 사용률 `40%` 이내 |
+| 출력 좌표계 일관성 | 지면 투영 결과는 planner가 바로 사용할 수 있도록 단일 기준 좌표계로 publish 되어야 한다. | `/car_projected`, `/car_projected_markers` 의 `frame_id` 는 `base_link` |
+
+### 대상 노드: `traffic_detection.py`
 
 #### 기능 요구사항
 
@@ -82,7 +79,13 @@
 
 #### 비기능 요구사항
 
-## Verification Scenario
+| 항목 | 설명 | 기준 |
+| :--- | :--- | :--- |
+| 처리 주기 | `traffic_detection.py` 는 `/cam2/usb_cam/image_raw` 입력을 누락 없이 처리할 수 있도록 신호등 카메라 입력 주기를 따라가야 한다. | `/cam2/usb_cam/image_raw` 입력 `10 Hz`, 1 frame 처리 시간 `100 ms` 이내 |
+| CPU 사용률 | 신호등 검출 처리는 다른 perception 및 planner 노드와 병행 실행 가능하도록 시스템 자원을 과도하게 점유하지 않아야 한다. | CPU 사용률 `40%` 이내 |
+| 실행 환경 | `traffic_detection.py` 는 YOLO 추론을 위해 CUDA 사용 가능 환경에서만 동작해야 하며, GPU가 없으면 시작 단계에서 종료되어야 한다. | CUDA 사용 가능 GPU 필요 |
+
+## 검증 bag
 
 - 실행 준비 / 확인 topic:
   `/cam1/usb_cam/image_raw`, `/cam2/usb_cam/image_raw` 가 포함된 rosbag replay 또는 실시간 camera 환경 준비, 확인 topic 은 `/car_detection`, `/car_projected`, `/car_projected_markers`, `/traffic`, `/yolo_overlay/image`, `/traffic_overlay/image`

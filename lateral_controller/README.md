@@ -27,7 +27,7 @@ MINT : `lane_steer`
   입력 : `pre_final_planner`, `parking`, `support/keyboard_control`, `arduino_motor_bridge`
   출력 : `arduino_motor_bridge`, `rqt_multiplot` 및 debug 확인 환경
 
-## Interface Summary
+## 인터페이스
 
 | Direction | Topic | Type | Description | Used by |
 | :--- | :--- | :--- | :--- | :--- |
@@ -37,7 +37,7 @@ MINT : `lane_steer`
 | Output | `/des_steer_deg` | `std_msgs/Float32` | 목표 조향각 monitor | `rqt_multiplot` / debug |
 | Output | `/cur_steer_deg` | `std_msgs/Float32` | 현재 조향각 monitor | `rqt_multiplot` / debug |
 
-## Node Summary
+## Node
 
 - `lateral_lower_controller.py`
   - `lateral_lower_controller.launch`에서 실행되는 메인 steering controller 노드.
@@ -49,9 +49,9 @@ MINT : `lane_steer`
   - step 형태의 steering 입력을 publish 하는 테스트 노드다.
   - 기본 출력 topic은 `/lane_steer` 이므로 실제 controller 검증 시 `/des_steer` 로 remap 이 필요.
 
-## Requirements Summary
+## 요구사항
 
-### `lateral_lower_controller.py` node
+### 대상 노드: `lateral_lower_controller.py`
 
 #### 기능 요구사항
 
@@ -63,7 +63,12 @@ MINT : `lane_steer`
 
 #### 비기능 요구사항
 
-## Verification Scenario
+| 항목 | 설명 | 기준 |
+| :--- | :--- | :--- |
+| 제어 주기 | `lateral_lower_controller.py` 는 일정 주기의 제어 루프를 유지하며 조향 제어를 수행해야 한다. | 제어 루프 주기 `20 Hz` |
+| 조향 PWM 출력 제한 | steering motor command 는 하드웨어 허용 범위를 넘지 않도록 항상 제한되어야 한다. | `/motor_cmd_steer` 출력 범위 `-255` ~ `255` |
+
+## 검증 bag
 
 - 실행 준비 : 실차 rosserial 환경 준비, 확인 topic 은 `/motor_cmd_steer`, `/des_steer_deg`, `/cur_steer_deg`
 - 확인 방법: `rostopic echo`, `rqt_multiplot`, step 또는 sine steering 입력에 대한 응답 확인
