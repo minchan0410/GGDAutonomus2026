@@ -108,6 +108,8 @@
 
 ![process block](./assets/flow.png)
 
+**kind of ByteTrack**
+
 1. `/scan`을 받아 전처리(ROI) 및 `PointCloud`로 변환
 2. 이전 프레임에 감지된 객체로부터 `Constant Velocity` 모델을 적용하여 예상 위치를 계산
 3. 각 객체의 예상 위치 주변 point를 해당 객체에 할당
